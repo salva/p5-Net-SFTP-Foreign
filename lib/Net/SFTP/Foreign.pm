@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.55';
+our $VERSION = '1.56';
 
 use strict;
 use warnings;
@@ -4583,7 +4583,7 @@ L<PuTTY|http://the.earth.li/~sgtatham/putty/> SSH client. Very popular
 between MS Windows users, it is also available for Linux and other
 Unixes now.
 
-=item put method fails
+=item Put method fails
 
 B<Q>: put fails with the following error:
 
@@ -4604,7 +4604,7 @@ Send me a bug report containing a dump of your $sftp object so I
 can add code for your particular server software to activate the
 work-around automatically.
 
-=item disable password authentication completely
+=item Disable password authentication completely
 
 B<Q>: When we try to open a session and the key either doesn't exist
 or is invalid, the child SSH hangs waiting for a password to be
@@ -4619,7 +4619,7 @@ new method as follows:
 
 See L<ssh_config(5)> for the details.
 
-=item understanding C<$attr-E<gt>perm> bits
+=item Understanding C<$attr-E<gt>perm> bits
 
 B<Q>: How can I know if a directory entry is a (directory|link|file|...)?
 
@@ -4633,9 +4633,7 @@ B<A>: Use the C<S_IS*> functions from L<Fcntl>. For instance:
     }
   }
 
-
 =back
-
 
 =head1 BUGS
 
