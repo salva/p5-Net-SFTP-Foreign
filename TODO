@@ -1,0 +1,26 @@
+
+TODO
+====
+
+- add support for capture_stderr option in constructor
+
+- port to OpenVMS
+
+- add support for later protocol versions
+
+- add support for encodings
+
+- improve password login, remove Expect dependency and try to backport
+  as much as possible fron Net::OpenSSH
+
+- detect unknown host key checking
+
+DONE
+==== 
+
+- add support for new extension methods available from late OpenSSH
+  SFTP server (http://www.sfr-fresh.com/unix/misc/openssh-5.1.tar.gz:a/ssh/PROTOCOL)
+
+- add support for unix2dos and dos2unix transformations on the fly for get and put.
+
+- add support con restarting transfer to put, get and derived methods.
