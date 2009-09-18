@@ -2,7 +2,7 @@ Net::SFTP::Foreign
 ===================
 
 Net::SFTP::Foreign implements an SFTP client in Perl using the native
-SSH client application to stablish the connection to the remote host.
+SSH client application to establish the connection to the remote host.
 
 
 PREREQUISITES
