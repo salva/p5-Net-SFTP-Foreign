@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.56_01
+	- use SIGTERM instead of SIGHUP to kill slave SSH process
+
 1.55  Sep 9, 2009
         - re-release as stable
 

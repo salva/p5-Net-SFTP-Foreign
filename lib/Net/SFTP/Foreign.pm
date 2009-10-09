@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56';
+our $VERSION = '1.56_01';
 
 use strict;
 use warnings;
@@ -541,8 +541,10 @@ sub disconnect {
 			  : $dirty_cleanup );
 
 	    if ($dirty or not defined $dirty) {
-
-		for my $sig (($dirty ? () : 0), 1, 1, 9, 9) {
+		require POSIX;
+		my $TERM = POSIX::SIGTERM();
+		my $KILL = POSIX::SIGKILL();
+		for my $sig (($dirty ? () : 0), $TERM, $TERM, $KILL, $KILL) {
 		    $sig and kill $sig, $pid;
 
 		    my $except;
@@ -4694,14 +4696,12 @@ L<Net::OpenSSH>.
 Modules offering similar functionality available from CPAN are
 L<Net::SFTP> or L<Net::SSH2>.
 
-
 =head1 COMMERCIAL SUPPORT
 
 Commercial support, professional services and custom software
 development around this module are available through my current
 company. Drop me an email with a rough description of your
 requirements and we will get back to you ASAP.
-
 
 =head1 COPYRIGHT
 
