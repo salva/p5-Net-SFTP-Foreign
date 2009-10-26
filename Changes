@@ -1,6 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
-1.56_01
+
+1.56_01  Oct 26, 2009
+	- pass PreferredAuthentication option to SSH process to force
+          password authentication (bug and solution by Stewart
+          Heckenberg)
 	- use SIGTERM instead of SIGHUP to kill slave SSH process
 
 1.55  Sep 9, 2009

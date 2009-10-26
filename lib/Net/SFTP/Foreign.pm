@@ -376,8 +376,10 @@ sub new {
             }
             elsif ($ssh_cmd_interface eq 'ssh') {
                 push @open2_cmd, -p => $port if defined $port;
-		push @open2_cmd, -o => 'NumberOfPasswordPrompts=1'
-		    if $pass and !$passphrase;
+		if ($pass and !$passphrase) {
+		    push @open2_cmd, (-o => 'NumberOfPasswordPrompts=1',
+				      -o => 'PreferredAuthentications=password');
+		}
             }
             else {
                 die "Unsupported ssh_cmd_interface '$ssh_cmd_interface'";
