@@ -534,7 +534,8 @@ sub disconnect {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
         if ($windows) {
-            kill 1, $pid
+	    require POSIX;
+            kill POSIX::SIGTERM(), $pid
                 and waitpid($pid, 0);
         }
         else {
@@ -1701,6 +1702,7 @@ sub get {
         if ($resume) {
             if (CORE::open $fh, '>>', $local) {
                 binmode $fh;
+		CORE::seek($fh, 0, 2);
                 $askoff = CORE::tell $fh;
                 if ($askoff < 0) {
                     # something is going really wrong here, fall

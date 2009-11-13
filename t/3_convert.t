@@ -112,9 +112,9 @@ for my $bs (7, 8, 9, 20, 1024, 4096) {
         ok($sftp->get('data.txd', 'copied.txd', resume => 1),
            "get with resume - $bs, $r")
             or diag $sftp->error;
-        ok(!filediff('data.txd', 'copied.txd'), "get with resume ok - $bs, $r")
-            or exit 1;
-#            or diag "truncation position: $trunc";
+        ok(!filediff('data.txd', 'copied.txd'), "get with resume ok - $bs, $r, $trunc")
+            # or exit 1;
+	    or diag "truncation position: $trunc";
     }
 
     unlink 'copied.txu';
