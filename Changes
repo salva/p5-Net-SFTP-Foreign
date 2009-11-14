@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.56_03  Nov 14, 2009
+	- use SIGTERM to kill children also on Windows
+	- workaround Cygwin bug, fopen(..., a); ftell() does not
+          return the size of the file
 
 1.56_01  Oct 26, 2009
 	- pass PreferredAuthentication option to SSH process to force
