@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56_03';
+our $VERSION = '1.56_04';
 
 use strict;
 use warnings;
@@ -378,7 +378,7 @@ sub new {
                 push @open2_cmd, -p => $port if defined $port;
 		if ($pass and !$passphrase) {
 		    push @open2_cmd, (-o => 'NumberOfPasswordPrompts=1',
-				      -o => 'PreferredAuthentications=password');
+				      -o => 'PreferredAuthentications=keyboard-interactive,password');
 		}
             }
             else {
