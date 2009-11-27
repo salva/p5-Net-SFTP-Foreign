@@ -390,6 +390,7 @@ sub new {
 	    push @open2_cmd, ($ssh1 ? "/usr/lib/sftp-server" : -s => 'sftp');
         }
     }
+    _debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -481,7 +482,6 @@ sub new {
 	    $expect->close_slave();
         }
         else {
-            _debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
 	    do {
                 local ($@, $SIG{__DIE__}, $SIG{__WARN__});
 		$sftp->{pid} = eval { open2($sftp->{ssh_in}, $sftp->{ssh_out}, @open2_cmd) };
