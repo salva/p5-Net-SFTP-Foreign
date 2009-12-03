@@ -2,6 +2,8 @@ Revision history for Net::SFTP::Foreign
 
 1.56_04
 	- accept keyboard-interactive authentication
+	- some docs reorganization
+	- add pointer to my wish list :-)
 
 1.56_03  Nov 14, 2009
 	- use SIGTERM to kill children also on Windows

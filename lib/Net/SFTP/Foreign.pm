@@ -4681,8 +4681,22 @@ Also, the following features should be considered experimental:
 
 - support for late_set_perm
 
+=head1 SUPPORT
+
 To report bugs, send me and email or use the CPAN bug tracking system
 at L<http://rt.cpan.org>.
+
+=head2 Commercial support
+
+Commercial support, professional services and custom software
+development around this module are available through my current
+company. Drop me an email with a rough description of your
+requirements and we will get back to you ASAP.
+
+=head2 My wishlist
+
+If you like this module and you're feeling generous, take a look at my
+Amazon Wish List: L<http://amzn.com/w/1WU1P6IR5QZ42>
 
 =head1 SEE ALSO
 
@@ -4699,13 +4713,6 @@ L<Net::OpenSSH>.
 
 Modules offering similar functionality available from CPAN are
 L<Net::SFTP> or L<Net::SSH2>.
-
-=head1 COMMERCIAL SUPPORT
-
-Commercial support, professional services and custom software
-development around this module are available through my current
-company. Drop me an email with a rough description of your
-requirements and we will get back to you ASAP.
 
 =head1 COPYRIGHT
 
