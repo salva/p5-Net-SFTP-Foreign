@@ -640,19 +640,6 @@ sub _check_extension {
     return undef;
 }
 
-sub _rel2abs {
-    my ($sftp, $path) = @_;
-    my $old = $path;
-    my $cwd = $sftp->{cwd};
-    if (defined $cwd and $path !~ m|^/|) {
-        # carp "sftp->rel2abs($path) => $sftp->{cwd}/$path\n";
-	$path =~ s|^(?:\./+)+||;
-	$path = ($cwd =~ m|/$| ? "$cwd$path" : "$cwd/$path");
-    }
-    $debug and $debug & 4096 and _debug("_rel2abs: '$old' --> '$path'");
-    return $path
-}
-
 # helper methods:
 sub _get_msg_and_check {
     my ($sftp, $etype, $eid, $err, $errstr) = @_;
@@ -1290,12 +1277,47 @@ sub mkdir {
                                    "Couldn't create remote directory");
 }
 
-sub _normalize_path {
-    my $path = shift;
-    $path =~ s|/\./|/|g;
-    $path =~ s|//+|/|g;
-    $path =~ s|^\./||;
-    $path;
+# sub _normalize_path {
+#     my $path = shift;
+#     my $net_share = $path =~ s|^//|/|;
+#     $path =~ s|(?:/+\.)+/|/|g;
+#     $path =~ s|//+|/|g;
+#     $path =~ s|(?<=/)/$||;
+#     $path = '.' if $path eq '';
+#     $path = "/$path" if $net_share;
+#     $path;
+# }
+
+sub join {
+    my $sftp = shift;
+    my $a = '.';
+    while (@_) {
+	my $b = shift;
+	if (defined $b) {
+	    $b =~ s|^(?:\./+)+||;
+	    if (length $b and $b ne '.') {
+		if ($b !~ m|^/| and $a ne '.' ) {
+		    $a = ($a =~ m|/$| ? "$a$b" : "$a/$b");
+		}
+		else {
+		    $a = $b
+		}
+		$a =~ s|(?:/+\.)+/?$|/|;
+		$a =~ s|(?<=[^/])/+$||;
+		$a = '.' unless length $a;
+	    }
+	}
+    }
+    $a;
+}
+
+sub _rel2abs {
+    my ($sftp, $path) = @_;
+    my $old = $path;
+    my $cwd = $sftp->{cwd};
+    $path = $sftp->join($sftp->{cwd}, $path);
+    $debug and $debug & 4096 and _debug("_rel2abs: '$old' --> '$path'");
+    return $path
 }
 
 sub mkpath {
@@ -2366,7 +2388,6 @@ sub ls {
 			 : $_->{filename} } @dir
 		if $names_only;
 	}
-	
         if ($ordered) {
             if ($names_only) {
                 @dir = sort @dir;
@@ -2375,28 +2396,9 @@ sub ls {
                 _sort_entries \@dir;
             }
         }
-	
 	return \@dir;
     }
-
     return undef;
-}
-
-sub join {
-    my $sftp = shift;
-
-    my $a = '.';
-    for my $b (@_) {
-	if ($b ne '') {
-	    if ($b =~ m|^/|) {
-		$a = $b;
-	    }
-	    else {
-		$a .= '/' . $b;
-	    }
-	}
-    }
-    _normalize_path($a);
 }
 
 sub glob {
@@ -2729,8 +2731,14 @@ sub rput {
     my $lfs = Net::SFTP::Foreign::Local->new;
 
     $local = $lfs->join($local, './');
-    my $qlocal = quotemeta $local;
-    my $relocal = qr/^$qlocal(.*)$/i;
+    my $relocal;
+    if ($local =~ m|^\./?$|) {
+	$relocal = qr/^(.*)$/;
+    }
+    else {
+	my $qlocal = quotemeta $local;
+	$relocal = qr/^$qlocal(.*)$/i;
+    }
 
     $copy_perm = 1 unless defined $copy_perm;
     $copy_time = 1 unless defined $copy_time;

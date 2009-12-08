@@ -55,7 +55,8 @@ sub readlink {
 sub join {
     shift;
     my $path = File::Spec->join(@_);
-    1 while ($path =~ s/([\/\\])\.(?:[\/\\]|$)/$1/g);
+    $path = File::Spec->canonpath($path);
+    print 'lfs->join("'.join('", "', @_)."\") => $path\n";
     $path
 }
 
