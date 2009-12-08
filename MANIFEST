@@ -25,6 +25,7 @@ t/1_run.t
 t/2_pods.t
 t/3_convert.t
 t/4_perl5_11.t
+t/5_join.t
 t/common.pm
 t/data.txd
 t/data.txu
