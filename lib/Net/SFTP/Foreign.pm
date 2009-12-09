@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Carp qw(carp croak);
 
-use Fcntl qw(:mode O_NONBLOCK F_SETFL F_GETFL);
+use Fcntl qw(:mode);
 use IPC::Open2;
 use Symbol ();
 use Errno ();
@@ -85,130 +85,8 @@ sub _queue_msg {
     $sftp->{_bout} .= $bytes;
 }
 
-sub _do_io_unix {
-    my ($sftp, $timeout) = @_;
 
-    $debug and $debug & 32 and _debug(sprintf "_do_io connected: %s", $sftp->{_connected} || 0);
-
-    return undef unless $sftp->{_connected};
-
-    my $fnoout = fileno $sftp->{ssh_out};
-    my $fnoin = fileno $sftp->{ssh_in};
-    my ($rv, $wv) = ('', '');
-    vec($rv, $fnoin, 1) = 1;
-    vec($wv, $fnoout, 1) = 1;
-
-    my $bin = \$sftp->{_bin};
-    my $bout = \$sftp->{_bout};
-
-    local $SIG{PIPE} = 'IGNORE';
-
-    my $len;
-    while (1) {
-        my $lbin = length $$bin;
-	if (defined $len) {
-            return 1 if $lbin >= $len;
-	}
-	elsif ($lbin >= 4) {
-            $len = 4 + unpack N => $$bin;
-            if ($len > 256 * 1024) {
-                $sftp->_set_status(SSH2_FX_BAD_MESSAGE);
-                $sftp->_set_error(SFTP_ERR_REMOTE_BAD_MESSAGE,
-                                  "bad remote message received");
-                return undef;
-            }
-            return 1 if $lbin >= $len;
-        }
-
-        my $rv1 = $rv;
-        my $wv1 = length($$bout) ? $wv : '';
-
-        $debug and $debug & 32 and _debug("_do_io select(-,-,-, ". (defined $timeout ? $timeout : 'undef') .")");
-
-        my $n = select($rv1, $wv1, undef, $timeout);
-        if ($n > 0) {
-            if (vec($wv1, $fnoout, 1)) {
-                my $written = syswrite($sftp->{ssh_out}, $$bout, 64 * 1024);
-                if ($debug and $debug & 32) {
-		    _debug (sprintf "_do_io write queue: %d, syswrite: %s, max: %d",
-			    length $$bout,
-			    (defined $written ? $written : 'undef'),
-			    64 * 1024);
-		    $debug & 2048 and $written and _hexdump(substr($$bout, 0, $written));
-		}
-                unless ($written) {
-                    $sftp->_conn_lost;
-                    return undef;
-                }
-                substr($$bout, 0, $written, '');
-            }
-            if (vec($rv1, $fnoin, 1)) {
-                my $read = sysread($sftp->{ssh_in}, $$bin, 64 * 1024, length($$bin));
-                if ($debug and $debug & 32) {
-		    _debug (sprintf "_do_io read sysread: %s, total read: %d",
-			    (defined $read ? $read : 'undef'),
-			    length $$bin);
-		    $debug & 1024 and $read and _hexdump(substr($$bin, -$read));
-		}
-                unless ($read) {
-                    $sftp->_conn_lost;
-                    return undef;
-                }
-            }
-        }
-        else {
-            $debug and $debug & 32 and _debug "_do_io select failed: $!";
-            next if ($n < 0 and $! == Errno::EINTR());
-            return undef;
-        }
-    }
-}
-
-sub _sysreadn {
-    my ($sftp, $n) = @_;
-    my $bin = \$sftp->{_bin};
-    while (1) {
-	my $len = length $$bin;
-	return 1 if $len >= $n;
-	my $read = sysread($sftp->{ssh_in}, $$bin, $n - $len, $len);
-	unless ($read) {
-	    $sftp->_conn_lost;
-	    return undef;
-	}
-    }
-    return $n;
-}
-
-sub _do_io_win {
-    my ($sftp, $timeout) = @_;
-
-    return undef unless $sftp->{_connected};
-
-    my $bin = \$sftp->{_bin};
-    my $bout = \$sftp->{_bout};
-
-    while (length $$bout) {
-	my $written = syswrite($sftp->{ssh_out}, $$bout, 20480);
-	unless ($written) {
-	    $sftp->_conn_lost;
-	    return undef;
-	}
-	substr($$bout, 0, $written, "");
-    }
-
-    $sftp->_sysreadn(4) or return undef;
-
-    my $len = 4 + unpack N => $$bin;
-    if ($len > 256 * 1024) {
-	$sftp->_set_status(SSH2_FX_BAD_MESSAGE);
-	$sftp->_set_error(SFTP_ERR_REMOTE_BAD_MESSAGE,
-			  "bad remote message received");
-	return undef;
-    }
-    $sftp->_sysreadn($len);
-}
-
-*_do_io = $windows ? \&_do_io_win : \&_do_io_unix;
+sub _do_io { $_[0]->{_backend}->do_io(@_) }
 
 sub _conn_lost {
     my ($sftp, $status, $err, @str) = @_;
@@ -303,6 +181,19 @@ sub new {
     $sftp->_set_status;
     $sftp->_set_error;
 
+    my $backend = delete $opts{backend};
+    unless (ref $backend) {
+	$backend = ($windows ? 'Windows' : 'Unix')
+	    unless (defined $backend);
+	$backend =~ /^\w+$/
+	    or croak "Bad backend name $backend";
+	my $backend_class = "Net::SFTP::Foreign::Backend::$backend";
+	eval "require $backend_class; 1"
+	    or croak "Unable to load backend $backend: $@";
+	$backend = $backend_class->new($sftp, \%opts);
+    }
+    $sftp->{_backend} = $backend;
+
     my $transport = delete $opts{transport};
 
     $sftp->{_block_size} = delete $opts{block_size} || DEFAULT_BLOCK_SIZE;
@@ -312,8 +203,8 @@ sub new {
     $sftp->{_timeout} = delete $opts{timeout};
     $sftp->{_autoflush} = delete $opts{autoflush};
     $sftp->{_late_set_perm} = delete $opts{late_set_perm};
-    $sftp->{_fs_encoding} = delete $opts{fs_encoding};
     $sftp->{_dirty_cleanup} = delete $opts{dirty_cleanup};
+    $sftp->{_fs_encoding} = delete $opts{fs_encoding};
 
     if (defined $sftp->{_fs_encoding}) {
         $] < 5.008
@@ -394,7 +285,10 @@ sub new {
 
     %opts and _croak_bad_options(keys %opts);
 
-    if (defined $transport) {
+    if ($backend->use_private_transport) {
+	# do nothing;
+    }
+    elsif (defined $transport) {
         if (ref $transport eq 'ARRAY') {
             @{$sftp}{qw(ssh_in ssh_out pid)} = @$transport;
         }
@@ -494,13 +388,8 @@ sub new {
             }
         }
     }
-    for my $dir (qw(ssh_in ssh_out)) {
-	binmode $sftp->{$dir};
-	unless ($windows) {
-	    my $flags = fcntl($sftp->{$dir}, F_GETFL, 0);
-	    fcntl($sftp->{$dir}, F_SETFL, $flags | O_NONBLOCK);
-	}
-    }
+
+    $backend->init_transport($sftp);
 
     $sftp->_init;
     $sftp

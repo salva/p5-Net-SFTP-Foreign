@@ -9,6 +9,8 @@ lib/Net/SFTP/Foreign/Compat.pm
 lib/Net/SFTP/Foreign/Constants.pm
 lib/Net/SFTP/Foreign/Helpers.pm
 lib/Net/SFTP/Foreign/Local.pm
+lib/Net/SFTP/Foreign/Backend/Unix.pm
+lib/Net/SFTP/Foreign/Backend/Windows.pm
 LICENSE
 Makefile.PL
 MANIFEST
