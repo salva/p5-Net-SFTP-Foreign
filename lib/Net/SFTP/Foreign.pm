@@ -85,21 +85,6 @@ sub _queue_msg {
     $sftp->{_bout} .= $bytes;
 }
 
-sub _sysreadn {
-    my ($sftp, $n) = @_;
-    my $bin = \$sftp->{_bin};
-    while (1) {
-	my $len = length $$bin;
-	return 1 if $len >= $n;
-	my $read = sysread($sftp->{ssh_in}, $$bin, $n - $len, $len);
-	unless ($read) {
-	    $sftp->_conn_lost;
-	    return undef;
-	}
-    }
-    return $n;
-}
-
 sub _do_io_unix {
     my ($sftp, $timeout) = @_;
 
@@ -177,6 +162,21 @@ sub _do_io_unix {
             return undef;
         }
     }
+}
+
+sub _sysreadn {
+    my ($sftp, $n) = @_;
+    my $bin = \$sftp->{_bin};
+    while (1) {
+	my $len = length $$bin;
+	return 1 if $len >= $n;
+	my $read = sysread($sftp->{ssh_in}, $$bin, $n - $len, $len);
+	unless ($read) {
+	    $sftp->_conn_lost;
+	    return undef;
+	}
+    }
+    return $n;
 }
 
 sub _do_io_win {
