@@ -2921,7 +2921,7 @@ A wrapper module L<Net::SFTP::Foreign::Compat> is also provided for
 compatibility with L<Net::SFTP>.
 
 
-=head2 Net::SFTP::Foreign Vs. Net::SFTP
+=head2 Net::SFTP::Foreign Vs. Net::SFTP Vs. Net::SSH2::SFTP
 
 Why should I prefer Net::SFTP::Foreign over L<Net::SFTP>?
 
@@ -2949,6 +2949,16 @@ On the other hand, using the external command means an additional
 proccess being launched and running, depending on your OS this could
 eat more resources than the in process pure perl implementation
 provided by Net::SSH::Perl.
+
+L<Net::SSH2> is a module wrapping libssh2, an SSH version 2 client
+library written in C. It is a very active project that aims to replace
+L<Net::SSH::Perl>. Unfortunately, libssh2 SFTP functionality
+(available in Perl via L<Net::SSH2::SFTP>) is rather limited and its
+performance very poor.
+
+Later versions of Net::SFTP::Foreign can use L<Net::SSH2> as the
+transport layer via the backend module
+L<Net::SFTP::Foreign::Backend::Net_SSH2>.
 
 =head2 Usage
 
@@ -4430,7 +4440,10 @@ Net::SFTP::Foreign integrates nicely with my other module
 L<Net::OpenSSH>.
 
 Modules offering similar functionality available from CPAN are
-L<Net::SFTP> or L<Net::SSH2>.
+L<Net::SFTP> and L<Net::SSH2>.
+
+L<Net::SFTP::Foreign::Backend::Net_SSH2> allows to run
+Net::SFTP::Foreign in top of L<Net::SSH2>.
 
 =head1 COPYRIGHT
 
