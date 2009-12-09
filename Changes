@@ -1,9 +1,12 @@
 Revision history for Net::SFTP::Foreign
 
+1.56_05
+	- add support for plugable backends ***THIS IS A MAYOR
+          INTERNAL CHANGE THAT COULD INTRODUCE NEW BUGS***
+
 1.56_04  Dec 8, 2009
 	- remote file path joining sub rewritten (note: this could
-          change the module behaviour in some corner cases, but it was
-          broken)
+          change the module behaviour in some corner cases)
 	- new test file with path join operations
 	- rput('.',...) was failing due to bad path joining for local
           filesystem (bug report by Aaron Paetznick).

@@ -1,13 +1,12 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56_04';
+our $VERSION = '1.56_05';
 
 use strict;
 use warnings;
 use Carp qw(carp croak);
 
 use Fcntl qw(:mode);
-use IPC::Open2;
 use Symbol ();
 use Errno ();
 use Scalar::Util;
@@ -51,9 +50,6 @@ BEGIN {
     }
 }
 
-use constant DEFAULT_BLOCK_SIZE => 32768;
-use constant DEFAULT_QUEUE_SIZE => ($windows ? 4 : 32);
-
 sub _next_msg_id { shift->{_msg_id}++ }
 
 use constant _empty_attributes => Net::SFTP::Foreign::Attributes->new;
@@ -86,7 +82,7 @@ sub _queue_msg {
 }
 
 
-sub _do_io { $_[0]->{_backend}->do_io(@_) }
+sub _do_io { $_[0]->{_backend}->_do_io(@_) }
 
 sub _conn_lost {
     my ($sftp, $status, $err, @str) = @_;
@@ -136,15 +132,6 @@ sub _get_msg {
     return $msg;
 }
 
-sub _ipc_open2_bug_workaround {
-    # in some cases, IPC::Open3::open2 returns from the child
-    my $pid = shift;
-    unless ($pid == $$) {
-        require POSIX;
-        POSIX::_exit(-1);
-    }
-}
-
 sub _croak_bad_options {
     if (@_) {
         my $s = (@_ > 1 ? 's' : '');
@@ -170,7 +157,6 @@ sub new {
     my %opts = @_;
 
     my $sftp = { _msg_id => 0,
-		 _queue_size => ($windows ? 4 : 10),
 		 _bout => '',
 		 _bin => '',
 		 _connected => 1,
@@ -190,16 +176,16 @@ sub new {
 	my $backend_class = "Net::SFTP::Foreign::Backend::$backend";
 	eval "require $backend_class; 1"
 	    or croak "Unable to load backend $backend: $@";
-	$backend = $backend_class->new($sftp, \%opts);
+	$backend = $backend_class->_new($sftp, \%opts);
     }
     $sftp->{_backend} = $backend;
 
-    my $transport = delete $opts{transport};
+    my %defs = $backend->_defaults;
 
-    $sftp->{_block_size} = delete $opts{block_size} || DEFAULT_BLOCK_SIZE;
-    $sftp->{_read_ahead} = $sftp->{_block_size} * 4;
-    $sftp->{_write_delay} = $sftp->{_block_size} * 8;
-    $sftp->{_queue_size} = delete $opts{queue_size} || DEFAULT_QUEUE_SIZE;
+    $sftp->{_block_size} = delete $opts{block_size} || $defs{block_size} || 32*1024;
+    $sftp->{_queue_size} = delete $opts{queue_size} || $defs{queue_size} || 32;
+    $sftp->{_read_ahead} = $defs{read_ahead} || $sftp->{_block_size} * 4;
+    $sftp->{_write_delay} = $defs{write_delay} || $sftp->{_block_size} * 8;
     $sftp->{_timeout} = delete $opts{timeout};
     $sftp->{_autoflush} = delete $opts{autoflush};
     $sftp->{_late_set_perm} = delete $opts{late_set_perm};
@@ -208,7 +194,7 @@ sub new {
 
     if (defined $sftp->{_fs_encoding}) {
         $] < 5.008
-            and warn "fs_encoding feature is not supported in this perl version $]";
+            and carp "fs_encoding feature is not supported in this perl version $]";
     }
     else {
         $sftp->{_fs_encoding} = 'utf8';
@@ -216,182 +202,10 @@ sub new {
 
     $sftp->autodisconnect(delete $opts{autodisconnect});
 
-    my ($pass, $passphrase, $expect_log_user);
-
-    my @open2_cmd;
-    unless (defined $transport) {
-
-        $pass = delete $opts{passphrase};
-
-        if (defined $pass) {
-            $passphrase = 1;
-        }
-        else {
-            $pass = delete $opts{password};
-	    defined $pass and $sftp->{_password_authentication} = 1;
-        }
-
-        $expect_log_user = delete $opts{expect_log_user} || 0;
-
-        my $open2_cmd = delete $opts{open2_cmd};
-        if (defined $open2_cmd) {
-            @open2_cmd = _ensure_list($open2_cmd);
-        }
-        else {
-            my $host = delete $opts{host};
-            defined $host or croak "sftp target host not defined";
-
-            my $ssh_cmd = delete $opts{ssh_cmd};
-            $ssh_cmd = 'ssh' unless defined $ssh_cmd;
-            @open2_cmd = ($ssh_cmd);
-
-            my $ssh_cmd_interface = delete $opts{ssh_cmd_interface};
-            unless (defined $ssh_cmd_interface) {
-                $ssh_cmd_interface = ( $ssh_cmd =~ /\bplink(?:\.exe)?$/i
-                                       ? 'plink'
-                                       : 'ssh');
-            }
-
-            my $port = delete $opts{port};
-            my $user = delete $opts{user};
-	    my $ssh1 = delete $opts{ssh1};
-
-            my $more = delete $opts{more};
-            carp "'more' argument looks like if it should be splited first"
-                if (defined $more and !ref($more) and $more =~ /^-\w\s+\S/);
-
-            if ($ssh_cmd_interface eq 'plink') {
-                $pass and !$passphrase
-                    and croak "Password authentication via Expect is not supported for the plink client";
-                push @open2_cmd, -P => $port if defined $port;
-            }
-            elsif ($ssh_cmd_interface eq 'ssh') {
-                push @open2_cmd, -p => $port if defined $port;
-		if ($pass and !$passphrase) {
-		    push @open2_cmd, (-o => 'NumberOfPasswordPrompts=1',
-				      -o => 'PreferredAuthentications=keyboard-interactive,password');
-		}
-            }
-            else {
-                die "Unsupported ssh_cmd_interface '$ssh_cmd_interface'";
-            }
-            push @open2_cmd, -l => $user if defined $user;
-            push @open2_cmd, _ensure_list($more) if defined $more;
-            push @open2_cmd, $host;
-	    push @open2_cmd, ($ssh1 ? "/usr/lib/sftp-server" : -s => 'sftp');
-        }
-    }
-    _debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
-
+    $backend->_init_transport($sftp, \%opts);
     %opts and _croak_bad_options(keys %opts);
 
-    if ($backend->use_private_transport) {
-	# do nothing;
-    }
-    elsif (defined $transport) {
-        if (ref $transport eq 'ARRAY') {
-            @{$sftp}{qw(ssh_in ssh_out pid)} = @$transport;
-        }
-        else {
-            $sftp->{ssh_in} = $sftp->{ssh_out} = $transport;
-            $sftp->{_ssh_out_is_not_dupped} = 1;
-        }
-    }
-    else {
-        if (${^TAINT} and Scalar::Util::tainted($ENV{PATH})) {
-            _tcroak('Insecure $ENV{PATH}')
-        }
-
-        my $this_pid = $$;
-
-        if (defined $pass) {
-
-            # user has requested to use a password or a passphrase for authentication
-            # we use Expect to handle that
-
-            eval { require IO::Pty };
-            $@ and croak "password authentication is not available, IO::Pty and Expect are not installed";
-            eval { require Expect };
-            $@ and croak "password authentication is not available, Expect is not installed";
-
-            local ($ENV{SSH_ASKPASS}, $ENV{SSH_AUTH_SOCK}) if $passphrase;
-
-            my $name = $passphrase ? 'Passphrase' : 'Password';
-            my $eto = $sftp->{_timeout} ? $sftp->{_timeout} * 4 : 120;
-
-	    my $child;
-	    my $expect;
-	    if (eval $IPC::Open3::VERSION >= 1.0105) {
-		# open2(..., '-') only works from this IPC::Open3 version upwards;
-		my $pty = IO::Pty->new;
-		$expect = Expect->init($pty);
-		$expect->raw_pty(1);
-		$expect->log_user($expect_log_user);
-
-		$child = do {
-		    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-		    eval { open2($sftp->{ssh_in}, $sftp->{ssh_out}, '-') }
-		};
-		if (defined $child and !$child) {
-		    $pty->make_slave_controlling_terminal;
-		    do { exec @open2_cmd }; # work around suppress warning under mod_perl
-		    exit -1;
-		}
-		_ipc_open2_bug_workaround $this_pid;
-		# $pty->close_slave();
-	    }
-	    else {
-		$expect = Expect->new;
-		$expect->raw_pty(1);
-		$expect->log_user($expect_log_user);
-		$expect->spawn(@open2_cmd);
-		$sftp->{ssh_in} = $sftp->{ssh_out} = $expect;
-		$sftp->{_ssh_out_is_not_dupped} = 1;
-		$child = $expect->pid;
-	    }
-            unless (defined $child) {
-                $sftp->_conn_failed("Bad ssh command", $!);
-                return $sftp;
-            }
-            $sftp->{pid} = $child;
-            $sftp->{_expect} = $expect;
-
-            unless($expect->expect($eto, ':', '?')) {
-                $sftp->_conn_failed("$name not requested as expected", $expect->error);
-                return $sftp;
-            }
-	    my $before = $expect->before;
-	    if ($before =~ /^The authenticity of host /i or
-		$before =~ /^Warning: the \w+ host key for /i) {
-		$sftp->_conn_failed("the authenticity of the target host can not be established, connect from the command line first");
-		return $sftp;
-	    }
-            $expect->send("$pass\n");
-	    $sftp->{_password_sent} = 1;
-
-            unless ($expect->expect($eto, "\n")) {
-                $sftp->_conn_failed("$name interchange did not complete", $expect->error);
-                return $sftp;
-            }
-	    $expect->close_slave();
-        }
-        else {
-	    do {
-                local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-		$sftp->{pid} = eval { open2($sftp->{ssh_in}, $sftp->{ssh_out}, @open2_cmd) };
-	    };
-            _ipc_open2_bug_workaround $this_pid;
-
-            unless (defined $sftp->{pid}) {
-                $sftp->_conn_failed("Bad ssh command", $!);
-                return $sftp;
-            }
-        }
-    }
-
-    $backend->init_transport($sftp);
-
-    $sftp->_init;
+    $sftp->_init unless $sftp->error;
     $sftp
 }
 
@@ -3344,6 +3158,15 @@ See the FAQ below.
 Sets the C<dirty_cleanup> flag in a per object basis (see the BUGS
 section).
 
+=item backend => $backend
+
+From version 1.57 Net::SFTP::Foreign supports plugable backends in
+order to allow other ways to comunicate with the remote server in
+addition to the default I<pipe-to-ssh-process>.
+
+Custom backends may change the set of options supported by the C<new>
+method.
+
 =back
 
 =item $sftp-E<gt>error
@@ -4572,11 +4395,9 @@ C<symlink> method will interpret its arguments in reverse order.
 
 Also, the following features should be considered experimental:
 
+- multi-backend support
+
 - passing file handles to put and get methods
-
-- filesystem encoding
-
-- support for late_set_perm
 
 =head1 SUPPORT
 

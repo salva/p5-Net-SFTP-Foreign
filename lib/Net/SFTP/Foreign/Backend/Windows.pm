@@ -12,14 +12,16 @@ use Net::SFTP::Foreign::Helpers;
 use Net::SFTP::Foreign::Constants qw(SSH2_FX_BAD_MESSAGE
 				     SFTP_ERR_REMOTE_BAD_MESSAGE);
 
-sub new_with_ref { shift }
+require Net::SFTP::Foreign::Backend::Unix;
+our @ISA = qw(Net::SFTP::Foreign::Backend::Unix);
 
-sub use_private_transport { undef }
+sub _defaults {
+    ( default_queue_size => 4 )
+}
 
-sub init_transport {
-    my ($self, $sftp) = @_;
+sub _init_transport_streams {
     binmode $sftp->{ssh_in};
-    binmode $sftp->{ssh_out}
+    binmode $sftp->{ssh_out};
 }
 
 sub _sysreadn {
@@ -37,7 +39,7 @@ sub _sysreadn {
     return $n;
 }
 
-sub do_io {
+sub _do_io {
     my ($self, $sftp, $timeout) = @_;
 
     return undef unless $sftp->{_connected};
