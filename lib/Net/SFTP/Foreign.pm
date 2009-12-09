@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56_01';
+our $VERSION = '1.56_04';
 
 use strict;
 use warnings;
@@ -378,7 +378,7 @@ sub new {
                 push @open2_cmd, -p => $port if defined $port;
 		if ($pass and !$passphrase) {
 		    push @open2_cmd, (-o => 'NumberOfPasswordPrompts=1',
-				      -o => 'PreferredAuthentications=password');
+				      -o => 'PreferredAuthentications=keyboard-interactive,password');
 		}
             }
             else {
@@ -390,6 +390,7 @@ sub new {
 	    push @open2_cmd, ($ssh1 ? "/usr/lib/sftp-server" : -s => 'sftp');
         }
     }
+    _debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -481,7 +482,6 @@ sub new {
 	    $expect->close_slave();
         }
         else {
-            _debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
 	    do {
                 local ($@, $SIG{__DIE__}, $SIG{__WARN__});
 		$sftp->{pid} = eval { open2($sftp->{ssh_in}, $sftp->{ssh_out}, @open2_cmd) };
@@ -534,7 +534,8 @@ sub disconnect {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
         if ($windows) {
-            kill 1, $pid
+	    require POSIX;
+            kill POSIX::SIGTERM(), $pid
                 and waitpid($pid, 0);
         }
         else {
@@ -637,19 +638,6 @@ sub _check_extension {
     $sftp->_set_status(SSH2_FX_OP_UNSUPPORTED);
     $sftp->_set_error($error, "$errstr: extended operation not supported by server");
     return undef;
-}
-
-sub _rel2abs {
-    my ($sftp, $path) = @_;
-    my $old = $path;
-    my $cwd = $sftp->{cwd};
-    if (defined $cwd and $path !~ m|^/|) {
-        # carp "sftp->rel2abs($path) => $sftp->{cwd}/$path\n";
-	$path =~ s|^(?:\./+)+||;
-	$path = ($cwd =~ m|/$| ? "$cwd$path" : "$cwd/$path");
-    }
-    $debug and $debug & 4096 and _debug("_rel2abs: '$old' --> '$path'");
-    return $path
 }
 
 # helper methods:
@@ -1289,12 +1277,47 @@ sub mkdir {
                                    "Couldn't create remote directory");
 }
 
-sub _normalize_path {
-    my $path = shift;
-    $path =~ s|/\./|/|g;
-    $path =~ s|//+|/|g;
-    $path =~ s|^\./||;
-    $path;
+# sub _normalize_path {
+#     my $path = shift;
+#     my $net_share = $path =~ s|^//|/|;
+#     $path =~ s|(?:/+\.)+/|/|g;
+#     $path =~ s|//+|/|g;
+#     $path =~ s|(?<=/)/$||;
+#     $path = '.' if $path eq '';
+#     $path = "/$path" if $net_share;
+#     $path;
+# }
+
+sub join {
+    my $sftp = shift;
+    my $a = '.';
+    while (@_) {
+	my $b = shift;
+	if (defined $b) {
+	    $b =~ s|^(?:\./+)+||;
+	    if (length $b and $b ne '.') {
+		if ($b !~ m|^/| and $a ne '.' ) {
+		    $a = ($a =~ m|/$| ? "$a$b" : "$a/$b");
+		}
+		else {
+		    $a = $b
+		}
+		$a =~ s|(?:/+\.)+/?$|/|;
+		$a =~ s|(?<=[^/])/+$||;
+		$a = '.' unless length $a;
+	    }
+	}
+    }
+    $a;
+}
+
+sub _rel2abs {
+    my ($sftp, $path) = @_;
+    my $old = $path;
+    my $cwd = $sftp->{cwd};
+    $path = $sftp->join($sftp->{cwd}, $path);
+    $debug and $debug & 4096 and _debug("_rel2abs: '$old' --> '$path'");
+    return $path
 }
 
 sub mkpath {
@@ -1701,6 +1724,7 @@ sub get {
         if ($resume) {
             if (CORE::open $fh, '>>', $local) {
                 binmode $fh;
+		CORE::seek($fh, 0, 2);
                 $askoff = CORE::tell $fh;
                 if ($askoff < 0) {
                     # something is going really wrong here, fall
@@ -2364,7 +2388,6 @@ sub ls {
 			 : $_->{filename} } @dir
 		if $names_only;
 	}
-	
         if ($ordered) {
             if ($names_only) {
                 @dir = sort @dir;
@@ -2373,28 +2396,9 @@ sub ls {
                 _sort_entries \@dir;
             }
         }
-	
 	return \@dir;
     }
-
     return undef;
-}
-
-sub join {
-    my $sftp = shift;
-
-    my $a = '.';
-    for my $b (@_) {
-	if ($b ne '') {
-	    if ($b =~ m|^/|) {
-		$a = $b;
-	    }
-	    else {
-		$a .= '/' . $b;
-	    }
-	}
-    }
-    _normalize_path($a);
 }
 
 sub glob {
@@ -2727,8 +2731,14 @@ sub rput {
     my $lfs = Net::SFTP::Foreign::Local->new;
 
     $local = $lfs->join($local, './');
-    my $qlocal = quotemeta $local;
-    my $relocal = qr/^$qlocal(.*)$/i;
+    my $relocal;
+    if ($local =~ m|^\./?$|) {
+	$relocal = qr/^(.*)$/;
+    }
+    else {
+	my $qlocal = quotemeta $local;
+	$relocal = qr/^$qlocal(.*)$/i;
+    }
 
     $copy_perm = 1 unless defined $copy_perm;
     $copy_time = 1 unless defined $copy_time;
@@ -4679,8 +4689,22 @@ Also, the following features should be considered experimental:
 
 - support for late_set_perm
 
+=head1 SUPPORT
+
 To report bugs, send me and email or use the CPAN bug tracking system
 at L<http://rt.cpan.org>.
+
+=head2 Commercial support
+
+Commercial support, professional services and custom software
+development around this module are available through my current
+company. Drop me an email with a rough description of your
+requirements and we will get back to you ASAP.
+
+=head2 My wishlist
+
+If you like this module and you're feeling generous, take a look at my
+Amazon Wish List: L<http://amzn.com/w/1WU1P6IR5QZ42>
 
 =head1 SEE ALSO
 
@@ -4697,13 +4721,6 @@ L<Net::OpenSSH>.
 
 Modules offering similar functionality available from CPAN are
 L<Net::SFTP> or L<Net::SSH2>.
-
-=head1 COMMERCIAL SUPPORT
-
-Commercial support, professional services and custom software
-development around this module are available through my current
-company. Drop me an email with a rough description of your
-requirements and we will get back to you ASAP.
 
 =head1 COPYRIGHT
 
