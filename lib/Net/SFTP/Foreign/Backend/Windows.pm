@@ -20,6 +20,7 @@ sub _defaults {
 }
 
 sub _init_transport_streams {
+    my ($self, $sftp) = @_;
     binmode $sftp->{ssh_in};
     binmode $sftp->{ssh_out};
 }
