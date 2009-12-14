@@ -21,7 +21,7 @@ plan skip_all => "tests not supported on inferior OS"
 plan skip_all => "sftp-server not found"
     unless defined $sscmd;
 
-plan tests => 722;
+plan tests => 740;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
@@ -140,6 +140,15 @@ for my $setcwd (0, 1) {
     ok((-d $drdir_l), "mkdir 2");
     ok($sftp->rmdir($drdir), "rmdir 1");
     ok(!(-d $drdir_l), "rmdir 2");
+    ok($sftp->mkpath("$drdir/./foo"), "mkpath 1");
+    ok((-d "$drdir_l/foo"), "mkpath 2");
+    ok($sftp->rmdir("$drdir/foo"), "rmdir 3");
+    ok(!(-d "$drdir_l/foo"), "rmdir 4");
+    ok($sftp->mkpath("$drdir/foo"), "mkpath 3");
+    ok((-d "$drdir_l/foo"), "mkpath 4");
+    ok($sftp->rmdir("$drdir/foo"), "rmdir 5");
+    ok($sftp->rmdir($drdir), "rmdir 6");
+    ok(!(-d $drdir_l), "rmdir 7");
 
     my $attr = Net::SFTP::Foreign::Attributes->new;
     $attr->set_perm(0700);

@@ -67,6 +67,12 @@ sub _set_error {
     }
 }
 
+sub _clear_error_and_status {
+    my $sftp = shift;
+    $sftp->{_error} = 0;
+    $sftp->{_status} = 0;
+}
+
 sub _copy_error {
     $_[0]->{_error} = $_[1]->{_error};
 }

@@ -1,6 +1,15 @@
 Revision history for Net::SFTP::Foreign
 
-1.56_05
+1.56_06  Dec 14, 2009
+	- mkpath was broken, rewritten to not use the obsolete
+          _normalize_path method (bug report by Peter Edwards).
+	- add some tests for mkpath
+	- introduce internal _clear_error_and_status method
+	- completely remove _normalize_path
+	- correct bug in _debug not printing sub name under some
+          conditions
+
+1.56_05  Dec 9, 2009
 	- add support for plugable backends ***THIS IS A MAYOR
           INTERNAL CHANGE THAT COULD INTRODUCE NEW BUGS***
 

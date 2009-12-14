@@ -45,7 +45,7 @@ sub _debug {
         print STDERR "#$$ $ts $caller", @_,"\n"
     }
     else {
-        print STDERR '# $caller', @_,"\n"
+        print STDERR "# $caller", @_,"\n"
     }
 }
 

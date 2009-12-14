@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56_05';
+our $VERSION = '1.56_06';
 
 use strict;
 use warnings;
@@ -164,8 +164,7 @@ sub new {
 
     bless $sftp, $class;
 
-    $sftp->_set_status;
-    $sftp->_set_error;
+    $sftp->_clear_error_and_status;
 
     my $backend = delete $opts{backend};
     unless (ref $backend) {
@@ -351,8 +350,7 @@ sub _get_msg_and_check {
 	my $type = $msg->get_int8;
 	my $id = $msg->get_int32;
 
-	$sftp->_set_status;
-	$sftp->_set_error;
+	$sftp->_clear_error_and_status;
 
 	if ($id != $eid) {
 	    $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
@@ -451,6 +449,8 @@ sub setcwd {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $cwd) = @_;
+    $sftp->_clear_error_and_status;
+
     if (defined $cwd) {
         $cwd = $sftp->realpath($cwd);
         return undef unless defined $cwd;
@@ -628,8 +628,7 @@ sub eof {
 sub _write {
     my ($sftp, $rfh, $off, $cb) = @_;
 
-    $sftp->_set_error;
-    $sftp->_set_status;
+    $sftp->_clear_error_and_status;
 
     my $rfid = $sftp->_rfid($rfh);
     defined $rfid or return undef;
@@ -737,8 +736,7 @@ sub flush {
 sub _fill_read_cache {
     my ($sftp, $rfh, $len) = @_;
 
-    $sftp->_set_error;
-    $sftp->_set_status;
+    $sftp->_clear_error_and_status;
 
     $sftp->flush($rfh, 'out')
 	or return undef;
@@ -800,8 +798,7 @@ sub _fill_read_cache {
     }
 
     if ($sftp->{_status} == SSH2_FX_EOF and length $$bin) {
-	$sftp->_set_status;
-	$sftp->_set_error;
+	$sftp->_clear_error_and_status;
     }
 
     return $sftp->{_error} ? undef : length $$bin;
@@ -980,17 +977,6 @@ sub mkdir {
                                    "Couldn't create remote directory");
 }
 
-# sub _normalize_path {
-#     my $path = shift;
-#     my $net_share = $path =~ s|^//|/|;
-#     $path =~ s|(?:/+\.)+/|/|g;
-#     $path =~ s|//+|/|g;
-#     $path =~ s|(?<=/)/$||;
-#     $path = '.' if $path eq '';
-#     $path = "/$path" if $net_share;
-#     $path;
-# }
-
 sub join {
     my $sftp = shift;
     my $a = '.';
@@ -1019,7 +1005,7 @@ sub _rel2abs {
     my $old = $path;
     my $cwd = $sftp->{cwd};
     $path = $sftp->join($sftp->{cwd}, $path);
-    $debug and $debug & 4096 and _debug("_rel2abs: '$old' --> '$path'");
+    $debug and $debug & 4096 and _debug("'$old' --> '$path'");
     return $path
 }
 
@@ -1029,19 +1015,46 @@ sub mkpath {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $attrs) = @_;
-    $path = _normalize_path($sftp->_rel2abs($path));
+    $sftp->_clear_error_and_status;
 
-    my $start = '';
-    my @parts = grep length, split /\/+/, $path;
-    for my $part (@parts) {
-        $start .= "/$part";
-        unless ($sftp->test_d($start)) {
-            $sftp->mkdir($start, $attrs)
+    $path =~ s{^(/*)}{};
+    my $start = $1;
+    my @path;
+    while (1) {
+	my $p = "$start$path";
+	$debug and $debug & 8192 and _debug "checking $p";
+	if ($sftp->test_d($p)) {
+	    $debug and $debug & 8192 and _debug "$p is a dir";
+	    last;
+	}
+	unless (length $path) {
+	    $sftp->set_error(SFTP_ERR_REMOTE_MKDIR_FAILED,
+			     "Unable to make path, bad root");
+	    return undef;
+	}
+	unshift @path, $p;
+	$path =~ s{/*[^/]*$}{};
+    }
+    for my $p (@path) {
+	$debug and $debug & 8192 and _debug "mkdir $p";
+	if ($p =~ m{^(?:.*/)?\.{1,2}$} or $p =~ m{/$}) {
+	    $debug and $debug & 8192 and _debug "$p is a symbolic dir, skipping";
+	    unless ($sftp->test_d($p)) {
+		$debug and $debug & 8192 and _debug "symbolic dir $p can not be checked";
+		$sftp->error or
+		    $sftp->_set_error(SFTP_ERR_REMOTE_MKDIR_FAILED,
+				      "Unable to make path, bad name");
+		return undef;
+	    }
+	}
+	else {
+	    $sftp->mkdir($p, $attrs)
                 or return undef;
-        }
+	}
     }
     1;
 }
+
 
 sub setstat {
     @_ == 3 or croak 'Usage: $sftp->setstat($str, $attrs)';
@@ -1328,8 +1341,7 @@ sub get {
     $remote = $sftp->_rel2abs($remote);
     my $local_is_fh = (ref $local and $local->isa('GLOB'));
 
-    $sftp->_set_status;
-    $sftp->_set_error;
+    $sftp->_clear_error_and_status;
 
     my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
@@ -1657,8 +1669,7 @@ sub put {
     $remote = $sftp->_rel2abs($remote);
     my $local_is_fh = (ref $local and $local->isa('GLOB'));
 
-    $sftp->_set_error;
-    $sftp->_set_status;
+    $sftp->_clear_error_and_status;
 
     my $cb = delete $opts{callback};
 
@@ -2050,8 +2061,7 @@ sub ls {
 			    $entry->{a} = $a;
 			}
 			else {
-			    $sftp->_set_error;
-			    $sftp->_set_status;
+			    $sftp->_clear_error_and_status;
 			}
 		    }
 
@@ -2061,8 +2071,7 @@ sub ls {
 			    $fn = $entry->{realpath} = $rp;
 			}
 			else {
-			    $sftp->_set_error;
-			    $sftp->_set_status;
+			    $sftp->_clear_error_and_status;
 			}
 		    }
 
