@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use strict;
 use warnings;
@@ -10,7 +10,7 @@ our @CARP_NOT = qw(Net::SFTP::Foreign);
 
 use Fcntl qw(O_NONBLOCK F_SETFL F_GETFL);
 use IPC::Open2;
-use Net::SFTP::Foreign::Helpers;
+use Net::SFTP::Foreign::Helpers qw(_tcroak _ensure_list _debug _hexdump $debug);
 use Net::SFTP::Foreign::Constants qw(SSH2_FX_BAD_MESSAGE
 				     SFTP_ERR_REMOTE_BAD_MESSAGE);
 
