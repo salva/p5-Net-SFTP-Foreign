@@ -2251,7 +2251,7 @@ sub put_symlink {
     %opts and _croak_bad_options(keys %opts);
 
     $overwrite = 1 unless (defined $overwrite or $numbered);
-    my $perm = (stat $local)[2];
+    my $perm = (lstat $local)[2];
     unless (defined $perm) {
 	$sftp->_set_error(SFTP_ERR_LOCAL_STAT_FAILED,
 			  "Couldn't stat local file '$local'", $!);
@@ -2583,7 +2583,6 @@ sub mget {
     my %opts = @_;
 
     my $on_error = $opts{on_error};
-    my $gen_name = delete $opts{localname};
     my $ignore_links = delete $opts{ignore_links};
 
     my %glob_opts = (map { $_ => delete $opts{$_} }
@@ -2591,7 +2590,7 @@ sub mget {
                         wanted no_wanted strict_leading_dot));
 
     my %get_symlink_opts = (map { $_ => $opts{$_} }
-			    qw(copy_time overwrite numbered));
+			    qw(overwrite numbered));
 
     my %get_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask copy_perm copy_time block_size queue_size
@@ -2612,12 +2611,8 @@ sub mget {
 	}
 	else {
 	    my $fn = $e->{filename};
-	    my $local;
-	    $gen_name and $local = $gen_name->($sftp, $e);
-	    unless (defined $local) {
-		$fn =~ m{([^\\/]*)$};
-		$local = $1;
-	    }
+	    my ($local) = $fn =~ m{([^\\/]*)$};
+
 	    $local = File::Spec->catfile($localdir, $local)
 		if defined $localdir;
 
@@ -2635,7 +2630,59 @@ sub mget {
     $count;
 }
 
+sub mput {
+    @_ >= 2 or croak 'Usage: $sftp->mput($local, $remotedir, %opts)';
+    my $sftp = shift;
+    my $local = shift;
+    my $remotedir = (@_ & 1 ? shift : undef);
+    my %opts = @_;
 
+    my $on_error = $opts{on_error};
+    my $ignore_links = delete $opts{ignore_links};
+
+    my %glob_opts = (map { $_ => delete $opts{$_} }
+		     qw(on_error follow_links ignore_case
+                        wanted no_wanted strict_leading_dot));
+    my %put_symlink_opts = (map { $_ => $opts{$_} }
+			    qw(overwrite numbered));
+
+    my %put_opts = (map { $_ => delete $opts{$_} }
+		    qw(umask copy_perm copy_time block_size queue_size
+                       overwrite conversion resume numbered late_set_perm));
+
+    %opts and _croak_bad_options(keys %opts);
+
+    require Net::SFTP::Foreign::Local;
+    my $lfs = Net::SFTP::Foreign::Local->new;
+    my @local = map $lfs->glob($_, %glob_opts), _ensure_list $local;
+    
+    my $count = 0;
+    require File::Spec;
+    for my $e (@local) {
+	my $perm = $e->{a}->perm;
+	if (S_ISDIR($perm)) {
+	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
+			      "Remote object '$e->{filename}' is a directory");
+	}
+	else {
+	    my $fn = $e->{filename};
+	    my $remote = (File::Spec->splitpath($fn))[2];
+	    $remote = $sftp->join($remotedir, $remote)
+		if defined $remotedir;
+	    
+	    if (S_ISLNK($perm)) {
+		next if $ignore_links;
+		$sftp->put_symlink($fn, $remote, %put_symlink_opts);
+	    }
+	    else {
+		$sftp->put($fn, $remote, %put_opts);
+	    }
+	}
+	$count++ unless $sftp->error;
+	$sftp->_call_on_error($on_error, $e);
+    } 
+    $count;
+}
 
 sub _get_statvfs {
     my ($sftp, $eid, $error, $errstr) = @_;
@@ -3027,7 +3074,8 @@ Net::SFTP::Foreign is much faster transferring files, specially over
 networks with high (relative) latency.
 
 Net::SFTP::Foreign provides several high level methods not available
-from Net::SFTP as for instance C<find>, C<rget>, C<rput>.
+from Net::SFTP as for instance C<find>, C<glob>, C<rget>, C<rput>,
+C<rremove>, C<mget>, C<mput>.
 
 On the other hand, using the external command means an additional
 proccess being launched and running, depending on your OS this could
@@ -3360,7 +3408,7 @@ the same name already exists.
 
 =item numbered =E<gt> 1
 
-Modifies the local file name inserting a sequence number when required
+modifies the local file name inserting a sequence number when required
 in order to avoid overwriting local files.
 
 For instance:
@@ -3781,7 +3829,7 @@ equivalent:
 =item $sftp-E<gt>glob($pattern, %opts)
 
 performs a remote glob and returns the list of matching entries in the
-same format as C<find> method.
+same format as the L</find> method.
 
 This method tries to recover and continue under error conditions.
 
@@ -3852,8 +3900,8 @@ already exists it is overwritten. On by default.
 
 =item numbered =E<gt> $bool
 
-adds sequence number to local file names in order to avoid overwriting
-already existent files. Off by default.
+when required adds a sequence number to local file names in order to
+avoid overwriting already existent files. Off by default.
 
 =item newer_only =E<gt> $bool
 
@@ -3988,6 +4036,40 @@ for more information).
 Allow to select which file system objects have to be deleted.
 
 =back
+
+=item $sftp-E<gt>mget($remote, $localdir, %opts)
+
+=item $sftp-E<gt>mget(\@remote, $localdir, %opts)
+
+expands the wildcards on C<$remote> or C<@remote> and retrieves all
+the matching files.
+
+For instance:
+
+  $sftp->mget(['/etc/hostname.*', '/etc/init.d/*'], '/tmp');
+
+The method accepts all the options valid for L</glob> and for L</get>
+(except those that do not make sense :-)
+
+C<$localdir> is optional and defaults to the process cwd.
+
+Files are saved with the same name they have in the remote server
+excluding the directory parts.
+
+Note that name collisions are not detected. For instance:
+
+ $sftp->mget(["foo/file.txt", "bar/file.txt"], "/tmp")
+
+will transfer the first file to "/tmp/file.txt" and later overwrite it
+with the second one. The C<numbered> option can be used to avoid this
+issue.
+
+=item $sftp-E<gt>mput($local, $remotedir, %opts)
+
+=item $sftp-E<gt>mput(\@local, $remotedir, %opts)
+
+similar to L</mget> but works in the opposite direction transferring
+files from the local side to the remote one.
 
 =item $sftp-E<gt>join(@paths)
 
@@ -4530,6 +4612,10 @@ Also, the following features should be considered experimental:
 
 - passing file handles to put and get methods
 
+- mput and mget methods
+
+- numbered option
+
 =head1 SUPPORT
 
 To report bugs, send me and email or use the CPAN bug tracking system
@@ -4564,7 +4650,7 @@ Modules offering similar functionality available from CPAN are
 L<Net::SFTP> and L<Net::SSH2>.
 
 L<Net::SFTP::Foreign::Backend::Net_SSH2> allows to run
-Net::SFTP::Foreign in top of L<Net::SSH2>.
+Net::SFTP::Foreign on top of L<Net::SSH2>.
 
 =head1 COPYRIGHT
 
