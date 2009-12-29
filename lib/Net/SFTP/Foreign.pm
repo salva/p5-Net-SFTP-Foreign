@@ -1640,6 +1640,7 @@ sub get {
     my $queue_size = delete $opts{queue_size} || $sftp->{_queue_size};
     my $dont_save = delete $opts{dont_save};
     my $conversion = delete $opts{conversion};
+    my $numbered = delete $opts{numbered};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1647,10 +1648,14 @@ sub get {
 	if (defined $perm and defined $copy_perm);
     croak "'resume' and 'append' options can not be used simultaneously"
 	if ($resume and $append);
+    croak "'numbered' can not be used with 'overwrite', 'resume' or 'append'"
+	if ($numbered and ($overwrite or $resume or $append));
+
     if ($local_is_fh) {
 	my $append = 'option can not be used when target is a file handle';
 	$resume and croak "'resume' $append";
 	$overwrite and croak "'overwrite' $append";
+	$numbered and croak "'numbered' $append";
 	$dont_save and croak "'dont_save' $append";
     }
     %opts and _croak_bad_options(keys %opts);
@@ -1671,7 +1676,7 @@ sub get {
 	$numask = 0777 & ~$umask;
     }
 
-    $overwrite = 1 unless (defined $overwrite or $local_is_fh);
+    $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
 
@@ -1704,10 +1709,18 @@ sub get {
     }
     else {
         unless ($local_is_fh or $overwrite or $append or $resume) {
-	    if (-e $local) {
-		$sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
-				  "local file $local already exists");
-		return undef
+	    while (-e $local) {
+		if ($numbered) {
+		    my $old = $local;
+		    $local =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
+			or $local =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+		    $debug and $debug & 128 and _debug("numbering: $old => $local");
+		}
+		else {
+		    $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+				      "local file $local already exists");
+		    return undef
+		}
 	    }
         }
 
@@ -2416,8 +2429,8 @@ sub glob {
     my $ordered = delete $opts{ordered};
     my $wanted = _gen_wanted( delete $opts{wanted},
 			      delete $opts{no_wanted});
-    my $strict_leading_dot =
-	exists $opts{strict_leading_dot} ? delete $opts{strict_leading_dot} : 1;
+    my $strict_leading_dot = delete $opts{strict_leading_dot};
+    $strict_leading_dot = 1 unless defined $strict_leading_dot;
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -2850,6 +2863,70 @@ sub rput {
 
     return $count;
 }
+
+sub mget {
+    @_ >= 2 or croak 'Usage: $sftp->mget($remote, $localdir, %opts)';
+    ${^TAINT} and &_catch_tainted_args;
+
+    my $sftp = shift;
+    my $remote = shift;
+    my $localdir = (@_ & 1 ? shift : undef);
+    my %opts = @_;
+
+    my $on_error = $opts{on_error};
+    my $gen_name = delete $opts{localname};
+    my $ignore_links = delete $opts{ignore_links};
+
+    my %glob_opts = (map { $_ => delete $opts{$_} }
+		     qw(on_error follow_links ignore_case
+                        wanted no_wanted strict_leading_dot));
+
+    my %get_opts = (map { $_ => delete $opts{$_} }
+		    qw(umask copy_perm copy_time block_size queue_size
+                       overwrite conversion resume numbered));
+
+    %opts and _croak_bad_options(keys %opts);
+
+    my @remote = map $sftp->glob($_, %glob_opts), _ensure_list $remote;
+
+    my $ok = 0;
+
+    require File::Spec;
+    for my $e (@remote) {
+	my $perm = $e->{a}->perm;
+	if (S_ISDIR($perm)) {
+	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
+			      "Remote object '$e->{filename}' is a directory");
+	}
+	else {
+	    my $fn = $e->{filename};
+	    my $local;
+	    $gen_name and $local = $gen_name->($sftp, $e);
+	    unless (defined $local) {
+		$fn =~ m{([^\\/]*)$};
+		$local = $1;
+	    }
+	    $local = File::Spec->catfile($localdir, $local)
+		if defined $localdir;
+
+	    if (S_ISLNK($perm)) {
+		if (my $link = $sftp->readlink($fn)) {
+		    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+		    eval { CORE::symlink $link, $local } or
+			$sftp->_set_error(SFTP_ERR_LOCAL_SYMLINK_FAILED,
+					  "creation of symlink '$local' failed", $!);
+		}
+	    }
+	    else {
+		$sftp->get($fn, $local, %get_opts);
+	    }
+	}
+	$ok++ unless $sftp->error;
+	$sftp->_call_on_error($on_error, $e);
+    }
+    $ok;
+}
+
 sub _get_statvfs {
     my ($sftp, $eid, $error, $errstr) = @_;
     if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
