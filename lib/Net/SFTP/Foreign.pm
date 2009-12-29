@@ -3080,7 +3080,7 @@ C<rremove>, C<mget>, C<mput>.
 On the other hand, using the external command means an additional
 proccess being launched and running, depending on your OS this could
 eat more resources than the in process pure perl implementation
-provided by Net::SSH::Perl.
+provided by L<Net::SSH::Perl>.
 
 L<Net::SSH2> is a module wrapping libssh2, an SSH version 2 client
 library written in C. It is a very active project that aims to replace

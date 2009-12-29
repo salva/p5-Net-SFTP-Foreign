@@ -1,5 +1,13 @@
 Revision history for Net::SFTP::Foreign
 
+1.56_07  Dec 29, 2009
+	- new methods added: mget, mput, get_symlink, put_symlink
+	- new numbered feature
+	- some minor bugs corrected
+	- glob can now also be used from Net::SFTP::Foreign::Local
+	- some doc corrections and improvements
+	- _call_on_error was not cleaning up under some conditions
+
 1.56_06  Dec 14, 2009
 	- mkpath was broken, rewritten to not use the obsolete
           _normalize_path method (bug report by Peter Edwards).
