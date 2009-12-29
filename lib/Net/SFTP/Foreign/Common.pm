@@ -101,11 +101,10 @@ sub _set_errno {
 
 sub _call_on_error {
     my ($sftp, $on_error, $entry) = @_;
-    if ($on_error and $sftp->error) {
-	$on_error->($sftp, $entry);
-	$sftp->_set_error;
-	$sftp->_set_status;
-    }
+    $on_error and $sftp->error
+	and $on_error->($sftp, $entry);
+    $sftp->_set_error;
+    $sftp->_set_status;
 }
 
 # this method code is a little convoluted because we are trying to
