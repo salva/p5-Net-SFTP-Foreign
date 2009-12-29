@@ -56,7 +56,7 @@ sub join {
     shift;
     my $path = File::Spec->join(@_);
     $path = File::Spec->canonpath($path);
-    print 'lfs->join("'.join('", "', @_)."\") => $path\n";
+    # print 'lfs->join("'.join('", "', @_)."\") => $path\n";
     $path
 }
 
