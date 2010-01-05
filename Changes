@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.56_08  Jan 5, 2010
+	- put'ting a tied file handle was generating some warnings
+          (bug report and patch by Gavin Carr)
+
 1.56_07  Dec 29, 2009
 	- new methods added: mget, mput, get_symlink, put_symlink
 	- new numbered feature

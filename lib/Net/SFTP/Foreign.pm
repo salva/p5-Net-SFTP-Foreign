@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56_07';
+our $VERSION = '1.56_08';
 
 use strict;
 use warnings;
@@ -1746,7 +1746,14 @@ sub put {
 	# inside eval blocks
 	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
 	if ((undef, undef, $lmode, undef, undef,
-	     undef, undef, $lsize, $latime, $lmtime) = eval { CORE::stat $fh }) {
+	     undef, undef, $lsize, $latime, $lmtime) =
+	    eval {
+		no warnings; # Calling stat on a tied handler
+                             # generates a warning because the op is
+                             # not supported by the tie API.
+		CORE::stat $fh;
+	    }
+	   ) {
 	    # $fh can point at some place inside the file, not just at the
 	    # begining
 	    if ($local_is_fh) {
@@ -1958,7 +1965,7 @@ sub put {
                 $nextoff = $writeoff + $len;
             }
 
-            if (length $data) {
+            if ($len) {
                 my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
                                                int64 => $writeoff, str => $data);
                 push @msgid, $id;
@@ -4654,7 +4661,7 @@ Net::SFTP::Foreign on top of L<Net::SSH2>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2009 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2010 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 
