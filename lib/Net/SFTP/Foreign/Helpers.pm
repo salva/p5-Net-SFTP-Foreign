@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Helpers;
 
-our $VERSION = '1.52';
+our $VERSION = '1.57';
 
 use strict;
 use warnings;
@@ -12,18 +12,22 @@ use Scalar::Util qw(tainted);
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw( _do_nothing
-		  _sort_entries
+our @EXPORT = qw( _sort_entries
 		  _gen_wanted
 		  _ensure_list
-		  _glob_to_regex
-                  _tcroak
                   _catch_tainted_args
                   _debug
                   _gen_converter
 		  _hexdump
 		  $debug
                 );
+our @EXPORT_OK = qw( _do_nothing
+		     _glob_to_regex
+                     _tcroak );
+
+
+
+
 
 our $debug;
 

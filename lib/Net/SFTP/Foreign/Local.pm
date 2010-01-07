@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Local;
 
-our $VERSION = '0.01';
+our $VERSION = '1.57';
 
 use strict;
 use warnings;
@@ -10,7 +10,7 @@ use File::Spec;
 use Net::SFTP::Foreign::Attributes;
 use Net::SFTP::Foreign::Constants qw(:error);
 use Net::SFTP::Foreign::Helpers qw(_sort_entries _gen_wanted _do_nothing);
-use Net::SFTP::Foreign::Common;
+require Net::SFTP::Foreign::Common;
 our @ISA = qw(Net::SFTP::Foreign::Common);
 
 sub new {
@@ -56,7 +56,7 @@ sub join {
     shift;
     my $path = File::Spec->join(@_);
     $path = File::Spec->canonpath($path);
-    print 'lfs->join("'.join('", "', @_)."\") => $path\n";
+    # print 'lfs->join("'.join('", "', @_)."\") => $path\n";
     $path
 }
 

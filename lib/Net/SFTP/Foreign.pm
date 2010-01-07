@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.56_06';
+our $VERSION = '1.56_08';
 
 use strict;
 use warnings;
@@ -36,7 +36,7 @@ use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      SSH2_FILEXFER_VERSION );
 use Net::SFTP::Foreign::Attributes;
 use Net::SFTP::Foreign::Buffer;
-use Net::SFTP::Foreign::Common;
+require Net::SFTP::Foreign::Common;
 our @ISA = qw(Net::SFTP::Foreign::Common);
 
 our $dirty_cleanup;
@@ -1355,6 +1355,7 @@ sub get {
     my $queue_size = delete $opts{queue_size} || $sftp->{_queue_size};
     my $dont_save = delete $opts{dont_save};
     my $conversion = delete $opts{conversion};
+    my $numbered = delete $opts{numbered};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1362,10 +1363,14 @@ sub get {
 	if (defined $perm and defined $copy_perm);
     croak "'resume' and 'append' options can not be used simultaneously"
 	if ($resume and $append);
+    croak "'numbered' can not be used with 'overwrite', 'resume' or 'append'"
+	if ($numbered and ($overwrite or $resume or $append));
+
     if ($local_is_fh) {
 	my $append = 'option can not be used when target is a file handle';
 	$resume and croak "'resume' $append";
 	$overwrite and croak "'overwrite' $append";
+	$numbered and croak "'numbered' $append";
 	$dont_save and croak "'dont_save' $append";
     }
     %opts and _croak_bad_options(keys %opts);
@@ -1376,17 +1381,17 @@ sub get {
     }
 
     my $oldumask = umask;
-    my $numask;
+    my $neg_umask;
 
     if (defined $perm) {
-	$numask = $perm;
+	$neg_umask = $perm;
     }
     else {
 	$umask = $oldumask unless defined $umask;
-	$numask = 0777 & ~$umask;
+	$neg_umask = 0777 & ~$umask;
     }
 
-    $overwrite = 1 unless (defined $overwrite or $local_is_fh);
+    $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
 
@@ -1419,21 +1424,29 @@ sub get {
     }
     else {
         unless ($local_is_fh or $overwrite or $append or $resume) {
-	    if (-e $local) {
-		$sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
-				  "local file $local already exists");
-		return undef
+	    while (-e $local) {
+		if ($numbered) {
+		    my $old = $local;
+		    $local =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
+			or $local =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+		    $debug and $debug & 128 and _debug("numbering: $old => $local");
+		}
+		else {
+		    $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+				      "local file $local already exists");
+		    return undef
+		}
 	    }
         }
 
         if ($copy_perm) {
             my $aperm = $a->perm;
-            $perm = 0666 unless defined $perm;
-            $a->perm =~ /^(\d+)$/ or die "perm is not numeric";
+            $aperm = 0666 unless defined $aperm;
+            $aperm =~ /^(\d+)$/ or die "perm is not numeric";
             $perm = int $1;
         }
 
-        $perm = (0666 & $numask)
+        $perm = (0666 & $neg_umask)
 	    unless (defined $perm or $local_is_fh);
 
         if ($resume) {
@@ -1489,7 +1502,7 @@ sub get {
 
 	if (defined $perm) {
 	    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-	    my $e = eval { chmod($perm & $numask, $local) };
+	    my $e = eval { chmod($perm & $neg_umask, $local) };
 	    if ($@ or $e <= 0) {
 		$sftp->_set_error(SFTP_ERR_LOCAL_CHMOD_FAILED,
 				  "Can't chmod $local", ($@ ? $@ : $!));
@@ -1684,6 +1697,7 @@ sub put {
     my $queue_size = delete $opts{queue_size} || $sftp->{_queue_size};
     my $conversion = delete $opts{conversion};
     my $late_set_perm = delete $opts{late_set_perm};
+    my $numbered = delete $opts{numbered};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1693,20 +1707,23 @@ sub put {
 	if ($resume and $append);
     croak "'resume' and 'overwrite' options can not be used simultaneously"
 	if ($resume and $overwrite);
+    croak "'numbered' can not be used with 'overwrite', 'resume' or 'append'"
+	if ($numbered and ($overwrite or $resume or $append));
+
     %opts and _croak_bad_options(keys %opts);
 
-    $overwrite = 1 unless defined $overwrite;
+    $overwrite = 1 unless (defined $overwrite or $numbered);
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
     $late_set_perm = $sftp->{_late_set_perm} unless defined $late_set_perm;
 
-    my $numask;
+    my $neg_umask;
     if (defined $perm) {
-	$numask = $perm;
+	$neg_umask = $perm;
     }
     else {
 	$umask = umask unless defined $umask;
-	$numask = 0777 & ~$umask;
+	$neg_umask = 0777 & ~$umask;
     }
 
     my ($fh, $lmode, $lsize, $latime, $lmtime);
@@ -1729,7 +1746,14 @@ sub put {
 	# inside eval blocks
 	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
 	if ((undef, undef, $lmode, undef, undef,
-	     undef, undef, $lsize, $latime, $lmtime) = eval { CORE::stat $fh }) {
+	     undef, undef, $lsize, $latime, $lmtime) =
+	    eval {
+		no warnings; # Calling stat on a tied handler
+                             # generates a warning because the op is
+                             # not supported by the tie API.
+		CORE::stat $fh;
+	    }
+	   ) {
 	    # $fh can point at some place inside the file, not just at the
 	    # begining
 	    if ($local_is_fh) {
@@ -1747,7 +1771,7 @@ sub put {
 	}
     }
 
-    $perm = $lmode & $numask if $copy_perm;
+    $perm = $lmode & $neg_umask if $copy_perm;
     my $attrs = Net::SFTP::Foreign::Attributes->new;
     $attrs->set_perm($perm) if defined $perm;
 
@@ -1849,6 +1873,15 @@ sub put {
     }
 
     unless (defined $rfh) {
+	if ($numbered) {
+	    while ($sftp->stat($remote)) {
+		my $old = $remote;
+		$remote =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
+		    or $remote =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+		$debug and $debug & 128 and _debug("numbering remote: $old => $local");
+	    }
+	}
+
         $rfh = $sftp->open($remote,
                            SSH2_FXF_WRITE | SSH2_FXF_CREAT |
                            ($append ? 0 : ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL)),
@@ -1856,10 +1889,10 @@ sub put {
             or return undef;
     }
 
-    # In some SFTP server implementations, open does not sets the
-    # attributes for existant files so we do it again. The
+    # In some SFTP server implementations, open does not set the
+    # attributes for existent files so we do it again. The
     # $late_set_perm work around is for some servers that do not
-    # support changing permissions on open files
+    # support changing the permissions of open files
     if (defined $perm and !$late_set_perm) {
         $sftp->fsetstat($rfh, $attrs)
             or return undef;
@@ -1932,7 +1965,7 @@ sub put {
                 $nextoff = $writeoff + $len;
             }
 
-            if (length $data) {
+            if ($len) {
                 my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
                                                int64 => $writeoff, str => $data);
                 push @msgid, $id;
@@ -2113,111 +2146,6 @@ sub ls {
     return undef;
 }
 
-sub glob {
-    @_ >= 2 or croak 'Usage: $sftp->glob($pattern, %opts)';
-    ${^TAINT} and &_catch_tainted_args;
-
-    my ($sftp, $glob, %opts) = @_;
-    return () if $glob eq '';
-
-    my $on_error = delete $opts{on_error};
-    my $follow_links = delete $opts{follow_links};
-    my $ignore_case = delete $opts{ignore_case};
-    my $names_only = delete $opts{names_only};
-    my $realpath = delete $opts{realpath};
-    my $ordered = delete $opts{ordered};
-    my $wanted = _gen_wanted( delete $opts{wanted},
-			      delete $opts{no_wanted});
-    my $strict_leading_dot =
-	exists $opts{strict_leading_dot} ? delete $opts{strict_leading_dot} : 1;
-
-    %opts and _croak_bad_options(keys %opts);
-
-    my $wantarray = wantarray;
-
-    my @parts = ($glob =~ m{\G/*([^/]+)}g);
-    push @parts, '.' unless @parts;
-
-    my $top = ($glob =~ m|^/|) ? '/' : '.';
-    my @res = ( {filename => $top} );
-    my $res = 0;
-
-    while (@parts and @res) {
-	my @parents = @res;
-	@res = ();
-	my $part = shift @parts;
-	my ($re, $has_wildcards) = _glob_to_regex($part, $strict_leading_dot, $ignore_case);
-
-	for my $parent (@parents) {
-	    my $pfn = $parent->{filename};
-            if ($has_wildcards) {
-                $sftp->ls( $pfn,
-                           ordered => $ordered,
-                           _wanted => sub {
-                               my $e = $_[1];
-                               if ($e->{filename} =~ $re) {
-                                   my $fn = $e->{filename} = $sftp->join($pfn, $e->{filename});
-                                   if ( (@parts or $follow_links)
-                                        and S_ISLNK($e->{a}->perm) ) {
-                                       if (my $a = $sftp->stat($fn)) {
-                                           $e->{a} = $a;
-                                       }
-                                       else {
-                                           $sftp->_call_on_error($on_error, $e);
-                                           return undef;
-                                       }
-                                   }
-                                   if (@parts) {
-                                       push @res, $e if S_ISDIR($e->{a}->perm)
-                                   }
-                                   elsif (!$wanted or $wanted->($sftp, $e)) {
-                                       if ($wantarray) {
-                                           if ($realpath) {
-                                               my $rp = $e->{realpath} = $sftp->realpath($e->{filename});
-                                               unless (defined $rp) {
-                                                   $sftp->_call_on_error($on_error, $e);
-                                                   return undef;
-                                               }
-                                           }
-                                           push @res, ($names_only
-                                                       ? ($realpath ? $e->{realpath} : $e->{filename} )
-                                                       : $e);
-                                       }
-                                       $res++;
-                                   }
-                               }
-                               return undef
-                           } )
-                    or $sftp->_call_on_error($on_error, $parent);
-            }
-            else {
-                my $fn = $sftp->join($pfn, $part);
-                my $method = ((@parts or $follow_links) ? 'stat' : 'lstat');
-                if (my $a = $sftp->$method($fn)) {
-                    my $e = { filename => $fn, a => $a };
-                    if (@parts) {
-                        push @res, $e if S_ISDIR($a->{perm})
-                    }
-                    elsif (!$wanted or $wanted->($sftp, $e)) {
-                        if ($wantarray) {
-                            if ($realpath) {
-                                my $rp = $fn = $e->{realpath} = $sftp->realpath($fn);
-                                unless (defined $rp) {
-                                    $sftp->_call_on_error($on_error, $e);
-                                    next;
-                                }
-                            }
-                            push @res, ($names_only ? $fn : $e)
-                        }
-                        $res++;
-                    }
-                }
-            }
-        }
-    }
-    return wantarray ? @res : $res;
-}
-
 sub rremove {
     @_ >= 2 or croak 'Usage: $sftp->rremove($dirs, %opts)';
     ${^TAINT} and &_catch_tainted_args;
@@ -2271,6 +2199,95 @@ sub rremove {
     return $count;
 }
 
+sub get_symlink {
+    @_ >= 3 or croak 'Usage: $sftp->get_symlink($remote, $local, %opts)';
+    my ($sftp, $remote, $local, %opts) = @_;
+    my $overwrite = delete $opts{overwrite};
+    my $numbered = delete $opts{numbered};
+
+    croak "'overwrite' and 'numbered' can not be used together"
+	if ($overwrite and $numbered);
+   %opts and _croak_bad_options(keys %opts);
+
+    $overwrite = 1 unless (defined $overwrite or $numbered);
+
+    my $a = $sftp->lstat($remote) or return undef;
+    unless (S_ISLNK($a->perm)) {
+	$sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
+			  "Remote object '$remote' is not a symlink");
+	return undef;
+    }
+
+    my $link = $sftp->readlink($remote) or return undef;
+
+    if ($numbered) {
+	while (-e $local) {
+	    my $old = $local;
+	    $local =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
+		or $local =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+	    $debug and $debug & 128 and _debug("numbering: $old => $local");
+	}
+    }
+    elsif (-e $local) {
+	if ($overwrite) {
+	    unlink $local;
+	}
+	else {
+	    $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+			      "local file $local already exists");
+	    return undef
+	}
+    }
+
+    unless (eval { CORE::symlink $link, $local }) {
+	$sftp->_set_error(SFTP_ERR_LOCAL_SYMLINK_FAILED,
+			  "creation of symlink '$local' failed", $!);
+	return undef;
+    }
+    1;
+}
+
+sub put_symlink {
+    @_ >= 3 or croak 'Usage: $sftp->put_symlink($local, $remote, %opts)';
+    my ($sftp, $local, $remote, %opts) = @_;
+    my $overwrite = delete $opts{overwrite};
+    my $numbered = delete $opts{numbered};
+
+    croak "'overwrite' and 'numbered' can not be used together"
+	if ($overwrite and $numbered);
+    %opts and _croak_bad_options(keys %opts);
+
+    $overwrite = 1 unless (defined $overwrite or $numbered);
+    my $perm = (lstat $local)[2];
+    unless (defined $perm) {
+	$sftp->_set_error(SFTP_ERR_LOCAL_STAT_FAILED,
+			  "Couldn't stat local file '$local'", $!);
+	return undef;
+    }
+    unless (S_ISLNK($perm)) {
+	$sftp->_set_error(SFTP_ERR_LOCAL_BAD_OBJECT,
+			  "Local file $local is not a symlink");
+	return undef;
+    }
+    my $target = readlink $local;
+    unless (defined $target) {
+	$sftp->_set_error(SFTP_ERR_LOCAL_READLINK_FAILED,
+			  "Couldn't read link '$local'", $!);
+	return undef;
+    }
+
+    if ($numbered) {
+	while ($sftp->stat($remote)) {
+	    my $old = $remote;
+	    $remote =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
+		or $remote =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+	    $debug and $debug & 128 and _debug("numbering remote: $old => $local");
+	}
+    }
+    $sftp->remove($remote) if $overwrite;
+    $sftp->symlink($remote, $target);
+}
+
 sub rget {
     @_ >= 3 or croak 'Usage: $sftp->rget($remote, $local, %opts)';
     ${^TAINT} and &_catch_tainted_args;
@@ -2289,6 +2306,7 @@ sub rget {
     my $ignore_links = delete $opts{ignore_links};
     my $conversion = delete $opts{conversion};
     my $resume = delete $opts{resume};
+    my $numbered = delete $opts{numbered};
 
     if ($resume and $conversion) {
         carp "resume option is useless when data conversion has also been requested";
@@ -2358,16 +2376,12 @@ sub rget {
 				 my $lpath = File::Spec->catfile($local, $1);
                                  ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
 				 if (S_ISLNK($e->{a}->perm) and !$ignore_links) {
-				     if (my $link = $sftp->readlink($fn)) {
-                                         {
-					     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-                                             if (eval {CORE::symlink $link, $lpath}) {
-                                                 $count++;
-                                                 return undef;
-                                             }
-                                         }
-					 $sftp->_set_error(SFTP_ERR_LOCAL_SYMLINK_FAILED,
-							   "creation of symlink '$lpath' failed", $!);
+				     if ($sftp->get_symlink($fn, $lpath,
+							    overwrite => $overwrite,
+							    numbered => $numbered,
+							    copy_time => $copy_time)) {
+					 $count++;
+					 return undef;
 				     }
 				 }
 				 elsif (S_ISREG($e->{a}->perm)) {
@@ -2379,6 +2393,7 @@ sub rget {
 				     else {
 					 if ($sftp->get($fn, $lpath,
 							overwrite => $overwrite,
+							numbered => $numbered,
 							queue_size => $queue_size,
 							block_size => $block_size,
 							copy_perm => $copy_perm,
@@ -2425,6 +2440,7 @@ sub rput {
     my $block_size = delete $opts{block_size};
     my $queue_size = delete $opts{queue_size};
     my $overwrite = delete $opts{overwrite};
+    my $numbered = delete $opts{numbered};
     my $newer_only = delete $opts{newer_only};
     my $on_error = delete $opts{on_error};
     my $ignore_links = delete $opts{ignore_links};
@@ -2496,7 +2512,7 @@ sub rput {
 			}
 			else {
 			    $lfs->_set_error(SFTP_ERR_LOCAL_BAD_PATH,
-					      "bad local path '$fn'");
+					      "Bad local path '$fn'");
 			}
 			$lfs->_call_on_error($on_error, $e);
 		    }
@@ -2511,13 +2527,13 @@ sub rput {
 			    if ($fn =~ $relocal) {
 				my $rpath = $sftp->join($remote, $1);
 				if (S_ISLNK($e->{a}->perm) and !$ignore_links) {
-				    if (my $link = $lfs->readlink($fn)) {
-					if ($sftp->symlink($link, $rpath)) {
-					    $count++;
-					    return undef;
-					}
-					$lfs->_copy_error($sftp);
+				    if ($sftp->put_symlink($fn, $remote,
+							   overwrite => $overwrite,
+							   numbered => $numbered)) {
+					$count++;
+					return undef;
 				    }
+				    $lfs->_copy_error($sftp);
 				}
 				elsif (S_ISREG($e->{a}->perm)) {
 				    my $ra;
@@ -2525,11 +2541,12 @@ sub rput {
 					 $ra = $sftp->stat($rpath) and
 					 $ra->mtime >= $e->{a}->mtime) {
 					$lfs->_set_error(SFTP_ERR_REMOTE_ALREADY_EXISTS,
-							 "newer remote file '$rpath' already exists");
+							 "Newer remote file '$rpath' already exists");
 				    }
 				    else {
 					if ($sftp->put($fn, $rpath,
 						       overwrite => $overwrite,
+						       numbered => $numbered,
 						       queue_size => $queue_size,
 						       block_size => $block_size,
 						       perm => ($copy_perm ? $e->{a}->perm : 0777) & $mask,
@@ -2546,13 +2563,13 @@ sub rput {
 				else {
 				    $lfs->_set_error(SFTP_ERR_LOCAL_BAD_OBJECT,
 						      ( $ignore_links
-							? "local file '$fn' is not regular file or directory"
-							: "local file '$fn' is not regular file, directory or link"));
+							? "Local file '$fn' is not regular file or directory"
+							: "Local file '$fn' is not regular file, directory or link"));
 				}
 			    }
 			    else {
 				$lfs->_set_error(SFTP_ERR_LOCAL_BAD_PATH,
-						  "bad local path '$fn'");
+						  "Bad local path '$fn'");
 			    }
 			    $lfs->_call_on_error($on_error, $e);
 			}
@@ -2562,6 +2579,118 @@ sub rput {
 
     return $count;
 }
+
+sub mget {
+    @_ >= 2 or croak 'Usage: $sftp->mget($remote, $localdir, %opts)';
+    ${^TAINT} and &_catch_tainted_args;
+
+    my $sftp = shift;
+    my $remote = shift;
+    my $localdir = (@_ & 1 ? shift : undef);
+    my %opts = @_;
+
+    my $on_error = $opts{on_error};
+    my $ignore_links = delete $opts{ignore_links};
+
+    my %glob_opts = (map { $_ => delete $opts{$_} }
+		     qw(on_error follow_links ignore_case
+                        wanted no_wanted strict_leading_dot));
+
+    my %get_symlink_opts = (map { $_ => $opts{$_} }
+			    qw(overwrite numbered));
+
+    my %get_opts = (map { $_ => delete $opts{$_} }
+		    qw(umask copy_perm copy_time block_size queue_size
+                       overwrite conversion resume numbered));
+
+    %opts and _croak_bad_options(keys %opts);
+
+    my @remote = map $sftp->glob($_, %glob_opts), _ensure_list $remote;
+
+    my $count = 0;
+
+    require File::Spec;
+    for my $e (@remote) {
+	my $perm = $e->{a}->perm;
+	if (S_ISDIR($perm)) {
+	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
+			      "Remote object '$e->{filename}' is a directory");
+	}
+	else {
+	    my $fn = $e->{filename};
+	    my ($local) = $fn =~ m{([^\\/]*)$};
+
+	    $local = File::Spec->catfile($localdir, $local)
+		if defined $localdir;
+
+	    if (S_ISLNK($perm)) {
+		next if $ignore_links;
+		$sftp->get_symlink($fn, $local, %get_symlink_opts);
+	    }
+	    else {
+		$sftp->get($fn, $local, %get_opts);
+	    }
+	}
+	$count++ unless $sftp->error;
+	$sftp->_call_on_error($on_error, $e);
+    }
+    $count;
+}
+
+sub mput {
+    @_ >= 2 or croak 'Usage: $sftp->mput($local, $remotedir, %opts)';
+    my $sftp = shift;
+    my $local = shift;
+    my $remotedir = (@_ & 1 ? shift : undef);
+    my %opts = @_;
+
+    my $on_error = $opts{on_error};
+    my $ignore_links = delete $opts{ignore_links};
+
+    my %glob_opts = (map { $_ => delete $opts{$_} }
+		     qw(on_error follow_links ignore_case
+                        wanted no_wanted strict_leading_dot));
+    my %put_symlink_opts = (map { $_ => $opts{$_} }
+			    qw(overwrite numbered));
+
+    my %put_opts = (map { $_ => delete $opts{$_} }
+		    qw(umask copy_perm copy_time block_size queue_size
+                       overwrite conversion resume numbered late_set_perm));
+
+    %opts and _croak_bad_options(keys %opts);
+
+    require Net::SFTP::Foreign::Local;
+    my $lfs = Net::SFTP::Foreign::Local->new;
+    my @local = map $lfs->glob($_, %glob_opts), _ensure_list $local;
+    
+    my $count = 0;
+    require File::Spec;
+    for my $e (@local) {
+	my $perm = $e->{a}->perm;
+	if (S_ISDIR($perm)) {
+	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
+			      "Remote object '$e->{filename}' is a directory");
+	}
+	else {
+	    my $fn = $e->{filename};
+	    my $remote = (File::Spec->splitpath($fn))[2];
+	    $remote = $sftp->join($remotedir, $remote)
+		if defined $remotedir;
+	    
+	    if (S_ISLNK($perm)) {
+		next if $ignore_links;
+		$sftp->put_symlink($fn, $remote, %put_symlink_opts);
+	    }
+	    else {
+		$sftp->put($fn, $remote, %put_opts);
+	    }
+	}
+	$count++ unless $sftp->error;
+	$sftp->_call_on_error($on_error, $e);
+    } 
+    $count;
+}
+
 sub _get_statvfs {
     my ($sftp, $eid, $error, $errstr) = @_;
     if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
@@ -2952,12 +3081,13 @@ Net::SFTP::Foreign is much faster transferring files, specially over
 networks with high (relative) latency.
 
 Net::SFTP::Foreign provides several high level methods not available
-from Net::SFTP as for instance C<find>, C<rget>, C<rput>.
+from Net::SFTP as for instance C<find>, C<glob>, C<rget>, C<rput>,
+C<rremove>, C<mget>, C<mput>.
 
 On the other hand, using the external command means an additional
 proccess being launched and running, depending on your OS this could
 eat more resources than the in process pure perl implementation
-provided by Net::SSH::Perl.
+provided by L<Net::SSH::Perl>.
 
 L<Net::SSH2> is a module wrapping libssh2, an SSH version 2 client
 library written in C. It is a very active project that aims to replace
@@ -3278,6 +3408,25 @@ appends the contents of the remote file at the end of the local one
 instead of overwriting it. If the local file does not exist a new one
 is created.
 
+=item overwrite =E<gt> 0
+
+setting this option to zero cancels the transfer when a local file of
+the same name already exists.
+
+=item numbered =E<gt> 1
+
+modifies the local file name inserting a sequence number when required
+in order to avoid overwriting local files.
+
+For instance:
+
+  for (1..2) {
+    $sftp->get("data.txt", "data.txt", numbered => 1);
+  }
+
+will copy the remote file as "data.txt" the first time and as
+"data(1).txt" the second one.
+
 =item conversion =E<gt> $conversion
 
 on the fly data conversion of the file contents can be performed with
@@ -3336,6 +3485,13 @@ that can be concurrently waiting for a server response.
 =item $sftp-E<gt>get_content($remote)
 
 Returns the content of the remote file.
+
+=item $sftp-E<gt>get_symlink($remote, $local, %opts)
+
+copies a symlink from the remote server to the local file system
+
+The accepted options are C<overwrite> and C<numbered>. They have the
+same effect as for the C<get> method.
 
 =item $sftp-E<gt>put($local, $remote, %opts)
 
@@ -3441,6 +3597,12 @@ that can be concurrently waiting for a server response.
 See the FAQ below.
 
 =back
+
+=item $sftp-E<gt>put_symlink($local, $remote, %opts)
+
+copies a local symlink to the remote host.
+
+The accepted options are C<overwrite> and C<numbered>.
 
 =item $sftp-E<gt>abort()
 
@@ -3674,7 +3836,7 @@ equivalent:
 =item $sftp-E<gt>glob($pattern, %opts)
 
 performs a remote glob and returns the list of matching entries in the
-same format as C<find> method.
+same format as the L</find> method.
 
 This method tries to recover and continue under error conditions.
 
@@ -3742,6 +3904,11 @@ remote server. By default it is on.
 
 if set to a true value, when a local file with the same name
 already exists it is overwritten. On by default.
+
+=item numbered =E<gt> $bool
+
+when required adds a sequence number to local file names in order to
+avoid overwriting already existent files. Off by default.
 
 =item newer_only =E<gt> $bool
 
@@ -3876,6 +4043,40 @@ for more information).
 Allow to select which file system objects have to be deleted.
 
 =back
+
+=item $sftp-E<gt>mget($remote, $localdir, %opts)
+
+=item $sftp-E<gt>mget(\@remote, $localdir, %opts)
+
+expands the wildcards on C<$remote> or C<@remote> and retrieves all
+the matching files.
+
+For instance:
+
+  $sftp->mget(['/etc/hostname.*', '/etc/init.d/*'], '/tmp');
+
+The method accepts all the options valid for L</glob> and for L</get>
+(except those that do not make sense :-)
+
+C<$localdir> is optional and defaults to the process cwd.
+
+Files are saved with the same name they have in the remote server
+excluding the directory parts.
+
+Note that name collisions are not detected. For instance:
+
+ $sftp->mget(["foo/file.txt", "bar/file.txt"], "/tmp")
+
+will transfer the first file to "/tmp/file.txt" and later overwrite it
+with the second one. The C<numbered> option can be used to avoid this
+issue.
+
+=item $sftp-E<gt>mput($local, $remotedir, %opts)
+
+=item $sftp-E<gt>mput(\@local, $remotedir, %opts)
+
+similar to L</mget> but works in the opposite direction transferring
+files from the local side to the remote one.
 
 =item $sftp-E<gt>join(@paths)
 
@@ -4418,6 +4619,10 @@ Also, the following features should be considered experimental:
 
 - passing file handles to put and get methods
 
+- mput and mget methods
+
+- numbered option
+
 =head1 SUPPORT
 
 To report bugs, send me and email or use the CPAN bug tracking system
@@ -4452,11 +4657,11 @@ Modules offering similar functionality available from CPAN are
 L<Net::SFTP> and L<Net::SSH2>.
 
 L<Net::SFTP::Foreign::Backend::Net_SSH2> allows to run
-Net::SFTP::Foreign in top of L<Net::SSH2>.
+Net::SFTP::Foreign on top of L<Net::SSH2>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2009 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2010 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 
