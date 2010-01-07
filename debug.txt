@@ -11,3 +11,4 @@
 1024 - hexdump of sysreads
 2048 - hexdump of syswrites
 4096 - _rel2abs
+8192 - mkpath
