@@ -18,6 +18,7 @@ README
 rfc/draft-ietf-secsh-filexfer-02.txt
 rfc/draft-ietf-secsh-filexfer-03.txt
 rfc/draft-ietf-secsh-filexfer-12.txt
+rfc/draft-ietf-secsh-filexfer-extensions-00.txt
 rfc/OpenSSH-protocol-deviations.txt
 samples/capture_stderr.pl
 samples/passwd_conn.pl
