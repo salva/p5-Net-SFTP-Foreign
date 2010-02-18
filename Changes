@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.56_09
+	 - taint checks on hashes where not reporting problemns
+           properly
+
 1.56_08  Jan 5, 2010
 	- put'ting a tied file handle was generating some warnings
           (bug report and patch by Gavin Carr)

@@ -119,7 +119,7 @@ sub _init_transport {
 	%$opts and return; # Net::SFTP::Foreign will find the
                            # unhandled options and croak
 
-	        if (${^TAINT} and Scalar::Util::tainted($ENV{PATH})) {
+	if (${^TAINT} and Scalar::Util::tainted($ENV{PATH})) {
             _tcroak('Insecure $ENV{PATH}')
         }
 

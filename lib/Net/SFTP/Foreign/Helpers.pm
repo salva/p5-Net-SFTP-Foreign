@@ -25,10 +25,6 @@ our @EXPORT_OK = qw( _do_nothing
 		     _glob_to_regex
                      _tcroak );
 
-
-
-
-
 our $debug;
 
 BEGIN {
@@ -216,16 +212,13 @@ sub _catch_tainted_args {
             _tcroak($msg);
         }
         elsif (ref($_)) {
-            local $@;
-            local $SIG{__DIE__};
-            for (eval { values %$_ }) {
-                if (tainted $_) {
-                    my (undef, undef, undef, $subn) = caller 1;
-                    my $msg = ( $subn =~ /::([a-z]\w*)$/
-                                ? "Insecure argument on '$1' method call"
-                                : "Insecure argument on method call" );
-                    _tcroak($msg);
-                }
+            for (grep tainted $_,
+		 do { local $@, $SIG{__DIE__}; eval { values %$_ }}) {
+		my (undef, undef, undef, $subn) = caller 1;
+		my $msg = ( $subn =~ /::([a-z]\w*)$/
+			    ? "Insecure argument on '$1' method call"
+			    : "Insecure argument on method call" );
+		_tcroak($msg);
             }
         }
     }
