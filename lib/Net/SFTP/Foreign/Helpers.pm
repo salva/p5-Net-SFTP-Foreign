@@ -213,7 +213,7 @@ sub _catch_tainted_args {
         }
         elsif (ref($_)) {
             for (grep tainted $_,
-		 do { local $@, $SIG{__DIE__}; eval { values %$_ }}) {
+		 do { local ($@, $SIG{__DIE__}); eval { values %$_ }}) {
 		my (undef, undef, undef, $subn) = caller 1;
 		my $msg = ( $subn =~ /::([a-z]\w*)$/
 			    ? "Insecure argument on '$1' method call"
