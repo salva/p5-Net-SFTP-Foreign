@@ -1,8 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
-1.56_09
+1.56_09  Mar 11, 2010
+	 - realpath feature was broken on find and ls methods (bug
+           report by Paul Kolano)
 	 - taint checks on hashes where not reporting problemns
            properly
+	 - minor doc corrections
 
 1.56_08  Jan 5, 2010
 	- put'ting a tied file handle was generating some warnings

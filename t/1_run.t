@@ -21,7 +21,7 @@ plan skip_all => "tests not supported on inferior OS"
 plan skip_all => "sftp-server not found"
     unless defined $sscmd;
 
-plan tests => 740;
+plan tests => 742;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
@@ -311,6 +311,9 @@ for my $setcwd (0, 1) {
 
     my @ls = sort map { $_->{filename} } @{$sftp->ls($rcwd, no_wanted => qr|^\.|)};
     is ("@ls", "@ld", "ls");
+
+    my @rp = sort map { $_->{realpath} } @{$sftp->ls($rcwd, realpath => 1, no_wanted => qr|^\.|)};
+    ok(!grep(!-e $_, @rp), "ls realpath");
 
     my @ld1 = sort('t', @ld);
     my @uns = $sftp->find($rcwd,
