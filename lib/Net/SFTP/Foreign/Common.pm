@@ -159,7 +159,7 @@ sub find {
 
 	    if ($follow or $realpath) {
 		unless (defined $entry->{realpath}) {
-                    my $rp = $self->{realpath} = $self->realpath($fn);
+                    my $rp = $entry->{realpath} = $self->realpath($fn);
                     next unless (defined $rp and not $rpdone{$rp}++);
 		}
 	    }

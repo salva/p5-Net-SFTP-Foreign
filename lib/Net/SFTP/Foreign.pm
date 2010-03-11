@@ -2099,7 +2099,7 @@ sub ls {
 		    }
 
 		    if ($realpath) {
-			my $rp = $sftp->realpath($fn);
+			my $rp = $sftp->realpath($sftp->join($dir, $fn));
 			if (defined $rp) {
 			    $fn = $entry->{realpath} = $rp;
 			}
@@ -3699,7 +3699,7 @@ any of the callbacks can modify the file system.
 
 =item realpath =E<gt> 1
 
-for every file object, performs a realpath operation and populates de
+for every file object, performs a realpath operation and populates the
 C<realpath> entry.
 
 =item names_only =E<gt> 1
