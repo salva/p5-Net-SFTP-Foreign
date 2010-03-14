@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.57  Mar 14, 2010
+         - release as stable
+
 1.56_09  Mar 11, 2010
 	 - realpath feature was broken on find and ls methods (bug
            report by Paul Kolano)
