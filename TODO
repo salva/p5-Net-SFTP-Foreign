@@ -2,8 +2,6 @@
 TODO
 ====
 
-- add support for capture_stderr option in constructor
-
 - port to OpenVMS
 
 - add support for later protocol versions
@@ -17,6 +15,8 @@ TODO
 
 DONE
 ==== 
+
+- add support for capture_stderr option in constructor
 
 - add support for new extension methods available from late OpenSSH
   SFTP server (http://www.sfr-fresh.com/unix/misc/openssh-5.1.tar.gz:a/ssh/PROTOCOL)

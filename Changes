@@ -1,14 +1,18 @@
 Revision history for Net::SFTP::Foreign
 
+1.58_01  Apr 19, 2010
+	- add stderr redirection feature
+	- minor doc corrections	 
+	- add donating to OpenSSH entry in docs
+
 1.57  Mar 14, 2010
-         - release as stable
+        - release as stable
 
 1.56_09  Mar 11, 2010
-	 - realpath feature was broken on find and ls methods (bug
-           report by Paul Kolano)
-	 - taint checks on hashes where not reporting problemns
-           properly
-	 - minor doc corrections
+	- realpath feature was broken on find and ls methods (bug
+          report by Paul Kolano)
+	- taint checks on hashes were not reporting problems properly
+	- minor doc corrections
 
 1.56_08  Jan 5, 2010
 	- put'ting a tied file handle was generating some warnings

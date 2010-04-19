@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.57';
+our $VERSION = '1.58_01';
 
 use strict;
 use warnings;
@@ -100,9 +100,11 @@ sub _conn_lost {
 }
 
 sub _conn_failed {
-    shift->_conn_lost(SSH2_FX_NO_CONNECTION,
+    my $sftp = shift;
+    $sftp->_conn_lost(SSH2_FX_NO_CONNECTION,
                       SFTP_ERR_CONNECTION_BROKEN,
                       @_)
+	unless $sftp->error;
 }
 
 sub _get_msg {
@@ -3229,7 +3231,7 @@ For instance:
 
 =item ssh1 =E<gt> 1
 
-Use old SSH1 approach for starting the remote SFTP server.
+use old SSH1 approach for starting the remote SFTP server.
 
 =item transport =E<gt> $fh
 
@@ -3259,6 +3261,31 @@ allows to completely redefine how C<ssh> is called. Its arguments are
 passed to L<IPC::Open2::open2> to open a pipe to the remote
 server.
 
+=item stderr_fh =E<gt> $fh
+
+redirects the output sent to stderr by the SSH subprocess to the given
+file handle.
+
+It can be used to suppress banners:
+
+  open my $ssherr, '>', '/dev/null' or die "unable to open /dev/null";
+  my $sftp = Net::SFTP::Foreign->new($host,
+                                     stderr_fh => $ssherr);
+
+Or to send SSH stderr to a file in order to capture errors for later
+analysis:
+
+  my $ssherr = File::Temp->new or die "File::Temp->new failed";
+  my $sftp = Net::SFTP::Foreign->new($hostname, more => ['-v'],
+                                     stderr_fh => $ssherr);
+  if ($sftp->error) {
+    print "sftp error: ".$sftp->error."\n";
+    seek($ssherr, 0, 0);
+    while (<$ssherr>) {
+      print "captured stderr: $_";
+    }
+  }
+
 =item block_size =E<gt> $default_block_size
 
 =item queue_size =E<gt> $default_queue_size
@@ -3268,7 +3295,7 @@ operations (see the C<put> or C<get> documentation).
 
 =item autodisconnect =E<gt> $ad
 
-By default, the SSH connection is closed from the DESTROY method when
+by default, the SSH connection is closed from the DESTROY method when
 the object goes out of scope. But on scripts that fork new processes,
 that results on the SSH connection being closed by the first process
 where the object goes out of scope, something undesirable.
@@ -4615,13 +4642,13 @@ C<symlink> method will interpret its arguments in reverse order.
 
 Also, the following features should be considered experimental:
 
-- multi-backend support
+- redirecting SSH stderr stream
 
-- passing file handles to put and get methods
+- multi-backend support
 
 - mput and mget methods
 
-- numbered option
+- numbered feature
 
 =head1 SUPPORT
 
@@ -4639,6 +4666,9 @@ requirements and we will get back to you ASAP.
 
 If you like this module and you're feeling generous, take a look at my
 Amazon Wish List: L<http://amzn.com/w/1WU1P6IR5QZ42>
+
+Also consider contributing to the OpenSSH project this module builds
+upon: L<http://www.openssh.org/donations.html>.
 
 =head1 SEE ALSO
 

@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use strict;
 use warnings;
@@ -9,6 +9,7 @@ use Carp;
 our @CARP_NOT = qw(Net::SFTP::Foreign);
 
 use Fcntl qw(O_NONBLOCK F_SETFL F_GETFL);
+use IPC::Open3;
 use IPC::Open2;
 use Net::SFTP::Foreign::Helpers qw(_tcroak _ensure_list _debug _hexdump $debug);
 use Net::SFTP::Foreign::Constants qw(SSH2_FX_BAD_MESSAGE
@@ -38,6 +39,26 @@ sub _ipc_open2_bug_workaround {
     }
 }
 
+sub _open3 {
+    my $sftp = shift;
+    if (defined $_[2]) {
+	my $sftp_err = $_[2];
+	my $fno = eval { no warnings; fileno($sftp_err) };
+	local *SSHERR;
+	unless (defined $fno and $fno >= 0 and
+		open(SSHERR, ">>&=", $fno)) {
+	    $sftp->_conn_failed("Unable to duplicate stderr redirection file handle: $!");
+	    return undef;
+	}
+	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+	return eval { open3(@_[1,0], ">&SSHERR", @_[3..$#_]) }
+    }
+    else {
+	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+	return eval { open2(@_[0,1], @_[3..$#_]) };
+    }
+}
+
 sub _init_transport {
     my ($class, $sftp, $opts) = @_;
 
@@ -53,10 +74,8 @@ sub _init_transport {
         }
     }
     else {
-	my (@open2_cmd, $pass, $passphrase, $expect_log_user);
-
-        $pass = delete $opts->{passphrase};
-
+        my $pass = delete $opts->{passphrase};
+	my $passphrase;
         if (defined $pass) {
             $passphrase = 1;
         }
@@ -65,9 +84,12 @@ sub _init_transport {
 	    defined $pass and $sftp->{_password_authentication} = 1;
         }
 
-        $expect_log_user = delete $opts->{expect_log_user} || 0;
+        my $expect_log_user = delete $opts->{expect_log_user} || 0;
+	my $stderr_fh = delete $opts->{stderr_fh};
 
         my $open2_cmd = delete $opts->{open2_cmd};
+
+	my @open2_cmd;
         if (defined $open2_cmd) {
             @open2_cmd = _ensure_list($open2_cmd);
         }
@@ -149,10 +171,8 @@ sub _init_transport {
 		$expect->raw_pty(1);
 		$expect->log_user($expect_log_user);
 
-		$child = do {
-		    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-		    eval { open2($sftp->{ssh_in}, $sftp->{ssh_out}, '-') }
-		};
+		$child = _open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
+
 		if (defined $child and !$child) {
 		    $pty->make_slave_controlling_terminal;
 		    do { exec @open2_cmd }; # work around suppress warning under mod_perl
@@ -197,10 +217,7 @@ sub _init_transport {
 	    $expect->close_slave();
         }
         else {
-	    do {
-                local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-		$sftp->{pid} = eval { open2($sftp->{ssh_in}, $sftp->{ssh_out}, @open2_cmd) };
-	    };
+	    $sftp->{pid} = _open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, @open2_cmd);
             _ipc_open2_bug_workaround $this_pid;
 
             unless (defined $sftp->{pid}) {
