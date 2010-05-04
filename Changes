@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.28_02
+1.58_02
         - add FAQ about strict host key checking
 
 1.58_01  Apr 19, 2010
