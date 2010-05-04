@@ -4606,6 +4606,38 @@ B<A>: Use the C<S_IS*> functions from L<Fcntl>. For instance:
     }
   }
 
+=item Host key checking
+
+B<Q>: Connecting to a remote server with password authentication fails
+with the following error:
+
+  The authenticity of the target host can not be established,
+  connect from the command line first
+
+B<A>: That probably means that the public key from the remote server
+is not stored in the C<~/.ssh/known_hosts> file. Run an SSH Connection
+from the command line as the same user as the script and answer C<yes>
+when asked to confirm the key suplied.
+
+Example:
+
+  $ ssh pluto /bin/true
+  The authenticity of host 'pluto (172.25.1.4)' can't be established.
+  RSA key fingerprint is 41:b1:a7:86:d2:a9:7b:b0:7f:a1:00:b7:26:51:76:52.
+  Are you sure you want to continue connecting (yes/no)? yes
+
+Your SSH client may also support some flag to disable this check, but
+doing it can ruin the security of the SSH protocol so I advise against
+its usage.
+
+Example:
+
+  # Warning: don't do that unless you fully understand
+  # its security implications!!!
+  $sftp = Net::SFTP::Foreign->new($host,
+                                  more => [-o => 'StrictHostKeyChecking no'],
+                                  ...);
+
 =back
 
 =head1 BUGS
