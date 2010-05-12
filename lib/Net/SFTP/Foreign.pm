@@ -1452,7 +1452,7 @@ sub get {
 	    unless (defined $perm or $local_is_fh);
 
         if ($resume) {
-            if (CORE::open $fh, '>>', $local) {
+            if (CORE::open $fh, '>', $local) {
                 binmode $fh;
 		CORE::seek($fh, 0, 2);
                 $askoff = CORE::tell $fh;
@@ -1468,7 +1468,6 @@ sub get {
                                           "Couldn't resume transfer, local file is bigger than remote");
                         return undef;
                     }
-
                     $size == $askoff and return 1;
                 }
             }
