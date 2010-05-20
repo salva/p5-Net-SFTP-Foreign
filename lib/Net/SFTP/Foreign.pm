@@ -1789,6 +1789,7 @@ sub put {
 	    }
 	    else {
 		$writeoff = $rattrs->size;
+		$debug and $debug & 16384 and _debug "resuming from $writeoff";
 	    }
 	}
 	elsif ($append) {
@@ -1925,6 +1926,7 @@ sub put {
                         }
                         $eof_t = 1;
                     }
+
                     # note that the $converter is called a last time
                     # with an empty string
                     $lsize += $converter->($input);
@@ -1938,9 +1940,17 @@ sub put {
             }
             else {
                 $len = CORE::read($fh, $data, $block_size);
+
                 if ($len) {
+		    $debug and $debug & 16384 and
+			_debug("block read at offset " . (CORE::tell($fh) - $len) .
+			       ", len $len, block_size $block_size");
+
 		    utf8::downgrade($data, 1)
-			    or croak "wide characters unexpectedly read from file";
+			or croak "wide characters unexpectedly read from file";
+
+		    $debug and $debug & 16384 and length $data != $len and
+			_debug "read data changed size on downgrade to " . length($data);
 		}
 		else {
                     unless (defined $len) {
@@ -1967,6 +1977,9 @@ sub put {
             }
 
             if ($len) {
+		$debug and $debug & 16384 and
+		    _debug "writing block at offset $writeoff, length " . length($data);
+
                 my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
                                                int64 => $writeoff, str => $data);
                 push @msgid, $id;
