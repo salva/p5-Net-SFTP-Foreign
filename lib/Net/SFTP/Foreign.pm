@@ -1808,6 +1808,7 @@ sub put {
                     my $len = length $converted_input;
                     my $delta = $writeoff - $off;
                     if ($delta <= $len) {
+                        $debug and $debug & 16384 and _debug "discarding $delta converted bytes";
                         substr $converted_input, 0, $delta, '';
                         last;
                     }
@@ -1840,6 +1841,7 @@ sub put {
 		while ($off) {
 		    my $read = CORE::read($fh, my($buf), ($off < 16384 ? $off : 16384));
 		    if ($read) {
+                        $debug and $debug & 16384 and _debug "discarding $read bytes";
 			$off -= $read;
 		    }
 		    else {
@@ -1939,12 +1941,13 @@ sub put {
                 $eof = 1 if ($eof_t and !$len);
             }
             else {
+                $debug and $debug & 16384 and
+                    _debug "reading block at offset ".CORE::tell($fh)." block_size: $block_size";
+
                 $len = CORE::read($fh, $data, $block_size);
 
                 if ($len) {
-		    $debug and $debug & 16384 and
-			_debug("block read at offset " . (CORE::tell($fh) - $len) .
-			       ", len $len, block_size $block_size");
+		    $debug and $debug & 16384 and _debug "block read, size: $len";
 
 		    utf8::downgrade($data, 1)
 			or croak "wide characters unexpectedly read from file";
