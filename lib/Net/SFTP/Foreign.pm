@@ -1786,7 +1786,8 @@ sub put {
 	my $rattrs = $sftp->stat($remote);
 	if ($rattrs) {
 	    if ($resume and $resume eq 'auto' and $rattrs->mtime >= $lmtime) {
-                $debug and $debug & 16384 and _debug "not resuming because local file is newer";
+                $debug and $debug & 16384 and
+                    _debug "not resuming because local file is newer, r: ".$rattrs->mtime." l: $lmtime";
 		undef $resume;
 	    }
 	    else {
