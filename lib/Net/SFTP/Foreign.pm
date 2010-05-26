@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_02';
+our $VERSION = '1.58_03';
 
 use strict;
 use warnings;
@@ -1767,8 +1767,9 @@ sub put {
 			      "Couldn't stat local file '$local'", $!);
 	    return undef;
 	}
-	else {
-	    undef $resume if ($resume and $resume eq 'auto');
+	elsif ($resume and $resume eq 'auto') {
+            $debug and $debug & 16384 and _debug "not resuming because stat'ing the local file failed";
+	    undef $resume
 	}
     }
 
@@ -1785,6 +1786,7 @@ sub put {
 	my $rattrs = $sftp->stat($remote);
 	if ($rattrs) {
 	    if ($resume and $resume eq 'auto' and $rattrs->mtime >= $lmtime) {
+                $debug and $debug & 16384 and _debug "not resuming because local file is newer";
 		undef $resume;
 	    }
 	    else {
@@ -1797,6 +1799,7 @@ sub put {
 	}
 
 	if ($resume and $writeoff) {
+            $debug and $debug & 16384 and _debug "resuming file transfer from $writeoff";
             if ($converter) {
                 # as size could change, we have to read and convert
                 # data until we reach the given position on the local
