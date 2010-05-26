@@ -1791,6 +1791,7 @@ sub put {
 	    }
 	    else {
 		$writeoff = $rattrs->size;
+		$debug and $debug & 16384 and _debug "resuming from $writeoff";
 	    }
 	}
 	elsif ($append) {
@@ -1810,6 +1811,7 @@ sub put {
                     my $len = length $converted_input;
                     my $delta = $writeoff - $off;
                     if ($delta <= $len) {
+                        $debug and $debug & 16384 and _debug "discarding $delta converted bytes";
                         substr $converted_input, 0, $delta, '';
                         last;
                     }
@@ -1842,6 +1844,7 @@ sub put {
 		while ($off) {
 		    my $read = CORE::read($fh, my($buf), ($off < 16384 ? $off : 16384));
 		    if ($read) {
+                        $debug and $debug & 16384 and _debug "discarding $read bytes";
 			$off -= $read;
 		    }
 		    else {
@@ -1928,6 +1931,7 @@ sub put {
                         }
                         $eof_t = 1;
                     }
+
                     # note that the $converter is called a last time
                     # with an empty string
                     $lsize += $converter->($input);
@@ -1940,10 +1944,19 @@ sub put {
                 $eof = 1 if ($eof_t and !$len);
             }
             else {
+                $debug and $debug & 16384 and
+                    _debug "reading block at offset ".CORE::tell($fh)." block_size: $block_size";
+
                 $len = CORE::read($fh, $data, $block_size);
+
                 if ($len) {
+		    $debug and $debug & 16384 and _debug "block read, size: $len";
+
 		    utf8::downgrade($data, 1)
-			    or croak "wide characters unexpectedly read from file";
+			or croak "wide characters unexpectedly read from file";
+
+		    $debug and $debug & 16384 and length $data != $len and
+			_debug "read data changed size on downgrade to " . length($data);
 		}
 		else {
                     unless (defined $len) {
@@ -1970,6 +1983,9 @@ sub put {
             }
 
             if ($len) {
+		$debug and $debug & 16384 and
+		    _debug "writing block at offset $writeoff, length " . length($data);
+
                 my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
                                                int64 => $writeoff, str => $data);
                 push @msgid, $id;
