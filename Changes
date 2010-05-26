@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.58_03  May 27, 2010
+        - even more debugging for put method and the resume feature
+
 1.58_02
         - add FAQ about strict host key checking
         - better debugging for put method
