@@ -1757,7 +1757,7 @@ sub put {
 	   ) {
 	    # $fh can point at some place inside the file, not just at the
 	    # begining
-	    if ($local_is_fh) {
+	    if ($local_is_fh and defined $lsize) {
 		my $tell = eval { CORE::tell $fh };
 		$lsize -= $tell if ($tell and $tell > 0);
 	    }
