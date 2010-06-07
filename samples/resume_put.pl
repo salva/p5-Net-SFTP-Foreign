@@ -51,8 +51,9 @@ eval {
         my $gpg_len = length $content;
         for (1..100) {
             my $remote = 1 + int rand length $content;
-            print " ${i}:$remote/$gpg_len"; $i++;
-            print STDERR "\n\n############################## $remote ################################\n\n";
+            print STDERR "\n\n############################## ${i}:$remote/$gpg_len ################################\n\n";
+            print " ${i}:$remote/$gpg_len";
+	    $i++;
             $s //= Net::SFTP::Foreign->new('localhost');
             $s->setcwd($pwd);
 
