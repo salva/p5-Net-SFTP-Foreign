@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.58_05  Jun 7, 2010
+	- add support for stderr_discard also in Windows backend
+
+1.58_04  Jun 7, 2010
+	- add support for stderr_discard
+
 1.58_03  May 27, 2010
         - even more debugging for put method and the resume feature
 

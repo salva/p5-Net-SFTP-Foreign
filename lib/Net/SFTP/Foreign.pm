@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_03';
+our $VERSION = '1.58_05';
 
 use strict;
 use warnings;
@@ -3304,6 +3304,10 @@ analysis:
       print "captured stderr: $_";
     }
   }
+
+=item stderr_discard =E<gt> 1
+
+redirects stderr to /dev/null
 
 =item block_size =E<gt> $default_block_size
 
