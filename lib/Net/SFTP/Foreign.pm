@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_05';
+our $VERSION = '1.58_06';
 
 use strict;
 use warnings;
@@ -238,9 +238,7 @@ sub disconnect {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
         if ($windows) {
-	    require POSIX;
-            kill POSIX::SIGTERM(), $pid
-                and waitpid($pid, 0);
+            kill TERM => $pid and waitpid($pid, 0);
         }
         else {
 	    my $dirty = ( defined $sftp->{_dirty_cleanup}
@@ -248,10 +246,7 @@ sub disconnect {
 			  : $dirty_cleanup );
 
 	    if ($dirty or not defined $dirty) {
-		require POSIX;
-		my $TERM = POSIX::SIGTERM();
-		my $KILL = POSIX::SIGKILL();
-		for my $sig (($dirty ? () : 0), $TERM, $TERM, $KILL, $KILL) {
+		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
 		    $sig and kill $sig, $pid;
 
 		    my $except;
@@ -4738,11 +4733,13 @@ from the L<sftp(1)> and L<sftp-server(8)> manual pages.
 Net::SFTP::Foreign integrates nicely with my other module
 L<Net::OpenSSH>.
 
+L<Net::SFTP::Foreign::Backend::Net_SSH2> allows to run
+Net::SFTP::Foreign on top of L<Net::SSH2>.
+
 Modules offering similar functionality available from CPAN are
 L<Net::SFTP> and L<Net::SSH2>.
 
-L<Net::SFTP::Foreign::Backend::Net_SSH2> allows to run
-Net::SFTP::Foreign on top of L<Net::SSH2>.
+L<Test::SFTP> allows to run tests against a remote SFTP server.
 
 =head1 COPYRIGHT
 

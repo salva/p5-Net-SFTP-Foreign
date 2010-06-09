@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.58_06
+        - use "kill $name" instead of using POSIX to get the signal
+          number
+        - add pointer to Test::SFTP
+
 1.58_05  Jun 7, 2010
 	- add support for stderr_discard also in Windows backend
 
