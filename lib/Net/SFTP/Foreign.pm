@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_05';
+our $VERSION = '1.58_06';
 
 use strict;
 use warnings;
@@ -4561,8 +4561,8 @@ B<A>: A bug in plink breaks it.
 
 As a work around, you can use plink C<-pw> argument to pass the
 password on the command line, but it is B<highly insecure>, anyone
-with a shell account on the machine would be able to get the password.
-Use at your own risk!:
+with a shell account on the local machine would be able to get the
+password. Use at your own risk!:
 
   # HIGHLY INSECURE!!!
   my $sftp = Net::SFTP::Foreign->new('foo@bar',
@@ -4599,6 +4599,20 @@ closed.
 Send me a bug report containing a dump of your $sftp object so I
 can add code for your particular server software to activate the
 work-around automatically.
+
+=item Put method fails even with late_set_perm set
+
+B<Q>: I added C<late_set_perm => 1> to the put call, but we are still
+receiving the error "Couldn't setstat remote file (setstat)".
+
+B<A>: Some servers forbid the SFTP C<setstat> operation used by the
+C<put> method for replicating the file permissions and timestamps on
+the remote side.
+
+As a work around you can just disable the feature:
+
+  $sftp->put($local_file, $remote_file,
+             copy_perms => 0, copy_time => 0);
 
 =item Disable password authentication completely
 

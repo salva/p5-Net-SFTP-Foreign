@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.58_06
+	- new FAQ about put failing because of forbidden setstat
+	- minor doc improvements
+
 1.58_05  Jun 7, 2010
 	- add support for stderr_discard also in Windows backend
 
