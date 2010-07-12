@@ -13,3 +13,4 @@
  4096 - _rel2abs
  8192 - mkpath
 16384 - put method
+32768 - recursive methods

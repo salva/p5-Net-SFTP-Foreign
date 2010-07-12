@@ -6,9 +6,8 @@ use strict;
 use warnings;
 use Carp;
 use Scalar::Util qw(dualvar tainted);
-use Fcntl qw(S_ISLNK S_ISDIR);
 
-use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug _glob_to_regex $debug);
+use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug _glob_to_regex _is_lnk _is_dir $debug);
 use Net::SFTP::Foreign::Constants qw(:status);
 
 my %status_str = ( SSH2_FX_OK, "OK",
@@ -155,7 +154,7 @@ sub find {
 	my $entry = shift;
 	my $fn = $entry->{filename};
 	for (1) {
-	    my $follow = ($follow_links and S_ISLNK($entry->{a}->perm));
+	    my $follow = ($follow_links and _is_lnk($entry->{a}->perm));
 
 	    if ($follow or $realpath) {
 		unless (defined $entry->{realpath}) {
@@ -201,11 +200,11 @@ sub find {
 	my $a = $try->{a} ||= $self->lstat($fn)
 	    or next;
 
-	next if (S_ISDIR($a->perm) and $done{$fn}++);
+	next if (_is_dir($a->perm) and $done{$fn}++);
 
 	$task->($try);
 
-	if (S_ISDIR($a->perm)) {
+	if (_is_dir($a->perm)) {
 	    if (!$descend or $descend->($self, $try)) {
 		if ($ordered or $atomic_readdir) {
 		    my $ls = $self->ls( $fn,
@@ -229,7 +228,7 @@ sub find {
 				   if ($child !~ /^\.\.?$/) {
 				       $entry->{filename} = $self->join($fn, $child);
 
-				       if (S_ISDIR($entry->{a}->perm)) {
+				       if (_is_dir($entry->{a}->perm)) {
 					   push @queue, $entry;
 				       }
 				       else {
@@ -295,7 +294,7 @@ sub glob {
                                if ($e->{filename} =~ $re) {
                                    my $fn = $e->{filename} = $sftp->join($pfn, $e->{filename});
                                    if ( (@parts or $follow_links)
-                                        and S_ISLNK($e->{a}->perm) ) {
+                                        and _is_lnk($e->{a}->perm) ) {
                                        if (my $a = $sftp->stat($fn)) {
                                            $e->{a} = $a;
                                        }
@@ -305,7 +304,7 @@ sub glob {
                                        }
                                    }
                                    if (@parts) {
-                                       push @res, $e if S_ISDIR($e->{a}->perm)
+                                       push @res, $e if _is_dir($e->{a}->perm)
                                    }
                                    elsif (!$wanted or $wanted->($sftp, $e)) {
                                        if ($wantarray) {
@@ -333,7 +332,7 @@ sub glob {
                 if (my $a = $sftp->$method($fn)) {
                     my $e = { filename => $fn, a => $a };
                     if (@parts) {
-                        push @res, $e if S_ISDIR($a->{perm})
+                        push @res, $e if _is_dir($a->{perm})
                     }
                     elsif (!$wanted or $wanted->($sftp, $e)) {
                         if ($wantarray) {
@@ -358,7 +357,7 @@ sub glob {
 sub test_d {
     my ($sftp, $name) = @_;
     my $a = $sftp->stat($name);
-    $a ? S_ISDIR($a->perm) : undef;
+    $a ? _is_dir($a->perm) : undef;
 }
 
 1;

@@ -6,7 +6,6 @@ use strict;
 use warnings;
 use Carp qw(carp croak);
 
-use Fcntl qw(:mode);
 use Symbol ();
 use Errno ();
 use Scalar::Util;
@@ -30,7 +29,7 @@ BEGIN {
 # knowing anything about the Helpers package!
 our $debug;
 BEGIN { *Net::SFTP::Foreign::Helpers::debug = \$debug };
-use Net::SFTP::Foreign::Helpers;
+use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug _sort_entries _gen_wanted _gen_converter);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -458,7 +457,7 @@ sub setcwd {
         return undef unless defined $cwd;
 	my $a = $sftp->stat($cwd)
 	    or return undef;
-	if (S_ISDIR($a->perm)) {
+	if (_is_dir($a->perm)) {
 	    return $sftp->{cwd} = $cwd;
 	}
 	else {
@@ -2109,7 +2108,7 @@ sub ls {
 				   longname => $ln,
 				   a => $a };
 
-		    if ($follow_links and S_ISLNK($a->perm)) {
+		    if ($follow_links and _is_lnk($a->perm)) {
 
 			if ($a = $sftp->stat($sftp->join($dir, $fn))) {
 			    $entry->{a} = $a;
@@ -2188,7 +2187,7 @@ sub rremove {
 		 wanted => sub {
 		     my $e = $_[1];
 		     my $fn = $e->{filename};
-		     if (S_ISDIR($e->{a}->perm)) {
+		     if (_is_dir($e->{a}->perm)) {
 			 push @dirs, $e;
 		     }
 		     else {
@@ -2233,7 +2232,7 @@ sub get_symlink {
     $overwrite = 1 unless (defined $overwrite or $numbered);
 
     my $a = $sftp->lstat($remote) or return undef;
-    unless (S_ISLNK($a->perm)) {
+    unless (_is_lnk($a->perm)) {
 	$sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
 			  "Remote object '$remote' is not a symlink");
 	return undef;
@@ -2285,7 +2284,7 @@ sub put_symlink {
 			  "Couldn't stat local file '$local'", $!);
 	return undef;
     }
-    unless (S_ISLNK($perm)) {
+    unless (_is_lnk($perm)) {
 	$sftp->_set_error(SFTP_ERR_LOCAL_BAD_OBJECT,
 			  "Local file $local is not a symlink");
 	return undef;
@@ -2390,13 +2389,13 @@ sub rget {
 		 wanted => sub {
 		     my $e = $_[1];
 		     # print "file fn:$e->{filename}, a:$e->{a}\n";
-		     unless (S_ISDIR($e->{a}->perm)) {
+		     unless (_is_dir($e->{a}->perm)) {
 			 if (!$wanted or $wanted->($sftp, $e)) {
 			     my $fn = $e->{filename};
 			     if ($fn =~ $reremote) {
 				 my $lpath = File::Spec->catfile($local, $1);
                                  ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
-				 if (S_ISLNK($e->{a}->perm) and !$ignore_links) {
+				 if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				     if ($sftp->get_symlink($fn, $lpath,
 							    overwrite => $overwrite,
 							    numbered => $numbered,
@@ -2405,7 +2404,7 @@ sub rget {
 					 return undef;
 				     }
 				 }
-				 elsif (S_ISREG($e->{a}->perm)) {
+				 elsif (_is_reg($e->{a}->perm)) {
 				     if ($newer_only and -e $lpath
 					 and (CORE::stat _)[9] >= $e->{a}->mtime) {
 					 $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
@@ -2511,11 +2510,13 @@ sub rput {
 		    # print "descend: $e->{filename}\n";
 		    if (!$wanted or $wanted->($lfs, $e)) {
 			my $fn = $e->{filename};
+			$debug and $debug and 32768 and _debug "rput handling $fn";
 			if ($fn =~ $relocal) {
-			    my $rpath = $sftp->join($remote, $1);
+			    my $rpath = $sftp->join($remote, File::Spec->splitdir($1));
+			    $debug and $debug and 32768 and _debug "rpath: $rpath";
 			    if ($sftp->test_d($rpath)) {
 				$lfs->_set_error(SFTP_ERR_REMOTE_ALREADY_EXISTS,
-						 "remote directory '$rpath' already exists");
+						 "Remote directory '$rpath' already exists");
 				$lfs->_call_on_error($on_error, $e);
 				return 1;
 			    }
@@ -2542,12 +2543,14 @@ sub rput {
 		wanted => sub {
 		    my $e = $_[1];
 		    # print "file fn:$e->{filename}, a:$e->{a}\n";
-		    unless (S_ISDIR($e->{a}->perm)) {
+		    unless (_is_dir($e->{a}->perm)) {
 			if (!$wanted or $wanted->($lfs, $e)) {
 			    my $fn = $e->{filename};
+			    $debug and $debug and 32768 and _debug "rput handling $fn";
 			    if ($fn =~ $relocal) {
-				my $rpath = $sftp->join($remote, $1);
-				if (S_ISLNK($e->{a}->perm) and !$ignore_links) {
+				my (undef, $d, $f) = File::Spec->splitpath($1);
+				my $rpath = $sftp->join($remote, File::Spec->splitdir($d), $f);
+				if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				    if ($sftp->put_symlink($fn, $remote,
 							   overwrite => $overwrite,
 							   numbered => $numbered)) {
@@ -2556,7 +2559,7 @@ sub rput {
 				    }
 				    $lfs->_copy_error($sftp);
 				}
-				elsif (S_ISREG($e->{a}->perm)) {
+				elsif (_is_reg($e->{a}->perm)) {
 				    my $ra;
 				    if ( $newer_only and
 					 $ra = $sftp->stat($rpath) and
@@ -2633,7 +2636,7 @@ sub mget {
     require File::Spec;
     for my $e (@remote) {
 	my $perm = $e->{a}->perm;
-	if (S_ISDIR($perm)) {
+	if (_is_dir($perm)) {
 	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
 			      "Remote object '$e->{filename}' is a directory");
 	}
@@ -2644,7 +2647,7 @@ sub mget {
 	    $local = File::Spec->catfile($localdir, $local)
 		if defined $localdir;
 
-	    if (S_ISLNK($perm)) {
+	    if (_is_lnk($perm)) {
 		next if $ignore_links;
 		$sftp->get_symlink($fn, $local, %get_symlink_opts);
 	    }
@@ -2688,7 +2691,7 @@ sub mput {
     require File::Spec;
     for my $e (@local) {
 	my $perm = $e->{a}->perm;
-	if (S_ISDIR($perm)) {
+	if (_is_dir($perm)) {
 	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
 			      "Remote object '$e->{filename}' is a directory");
 	}
@@ -2698,7 +2701,7 @@ sub mput {
 	    $remote = $sftp->join($remotedir, $remote)
 		if defined $remotedir;
 	    
-	    if (S_ISLNK($perm)) {
+	    if (_is_lnk($perm)) {
 		next if $ignore_links;
 		$sftp->put_symlink($fn, $remote, %put_symlink_opts);
 	    }
