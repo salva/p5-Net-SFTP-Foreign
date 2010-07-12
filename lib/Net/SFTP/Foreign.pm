@@ -4605,7 +4605,7 @@ work-around automatically.
 
 =item Put method fails even with late_set_perm set
 
-B<Q>: I added C<late_set_perm => 1> to the put call, but we are still
+B<Q>: I added C<late_set_perm =E<gt> 1> to the put call, but we are still
 receiving the error "Couldn't setstat remote file (setstat)".
 
 B<A>: Some servers forbid the SFTP C<setstat> operation used by the
