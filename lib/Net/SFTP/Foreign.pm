@@ -4416,7 +4416,7 @@ Sends a C<SSH_FXP_SYMLINK> command to create a new symbolic link
 C<$sl> pointing to C<$target>.
 
 C<$target> is stored as-is, without any path expansion taken place on
-it. User C<realpath> to normalize it:
+it. Use C<realpath> to normalize it:
 
   $sftp->symlink("foo.lnk" => $sftp->realpath("../bar"))
 
