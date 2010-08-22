@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.58_08  Aug 22, 2010
+	- import _hexdump from Helpers.pm (bug report by Chuck Kozak)
+	- call kill passing the signal name instead of using POSIX to
+          get its number
+
 1.58_07  Aug 2, 2010
 	- dump $! on failed sysreads and syswrites
 

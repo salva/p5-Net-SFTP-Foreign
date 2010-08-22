@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_07';
+our $VERSION = '1.58_08';
 
 use strict;
 use warnings;
@@ -29,7 +29,7 @@ BEGIN {
 # knowing anything about the Helpers package!
 our $debug;
 BEGIN { *Net::SFTP::Foreign::Helpers::debug = \$debug };
-use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug _sort_entries _gen_wanted _gen_converter);
+use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug _sort_entries _gen_wanted _gen_converter _hexdump);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -237,8 +237,7 @@ sub disconnect {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
         if ($windows) {
-	    require POSIX;
-            kill POSIX::SIGTERM(), $pid
+	    kill TERM => $pid
                 and waitpid($pid, 0);
         }
         else {
@@ -247,10 +246,7 @@ sub disconnect {
 			  : $dirty_cleanup );
 
 	    if ($dirty or not defined $dirty) {
-		require POSIX;
-		my $TERM = POSIX::SIGTERM();
-		my $KILL = POSIX::SIGKILL();
-		for my $sig (($dirty ? () : 0), $TERM, $TERM, $KILL, $KILL) {
+		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
 		    $sig and kill $sig, $pid;
 
 		    my $except;
