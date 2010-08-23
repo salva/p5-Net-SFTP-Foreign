@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_08';
+our $VERSION = '1.58_09';
 
 use strict;
 use warnings;
@@ -237,7 +237,7 @@ sub disconnect {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
         if ($windows) {
-	    kill TERM => $pid
+	    kill KILL => $pid
                 and waitpid($pid, 0);
         }
         else {
