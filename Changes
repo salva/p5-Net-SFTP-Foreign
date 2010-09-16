@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.58_09
+1.59  Sep 16, 2010
 	- kill ssh subprocess with KILL signal on Windows
 
 1.58_08  Aug 22, 2010
