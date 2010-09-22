@@ -1,5 +1,14 @@
 Revision history for Net::SFTP::Foreign
 
+1.61  Sep 22, 2010
+        - remove some dead code introducing unneded constraints that
+          cause the Net::SSH2 backend to fail (bug report by Philippe
+          Vouters)
+
+1.60  Sep 20, 2010
+        - _ensure_list was not being imported from Helpers (bug report
+          and solution by Jean-Benoît Baudens)
+
 1.59  Sep 16, 2010
 	- kill ssh subprocess with KILL signal on Windows
 

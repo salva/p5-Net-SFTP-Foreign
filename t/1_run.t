@@ -129,7 +129,6 @@ for my $setcwd (0, 1) {
         unlink $dlfn1;
         unlink $drfn_l;
         unlink $dlfn;
-
     }
 
     # mkdir and rmdir

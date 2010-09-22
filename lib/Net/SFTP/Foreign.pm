@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.59';
+our $VERSION = '1.61';
 
 use strict;
 use warnings;
@@ -29,7 +29,9 @@ BEGIN {
 # knowing anything about the Helpers package!
 our $debug;
 BEGIN { *Net::SFTP::Foreign::Helpers::debug = \$debug };
-use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug _sort_entries _gen_wanted _gen_converter _hexdump);
+use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
+                                   _sort_entries _gen_wanted _gen_converter
+                                   _hexdump _ensure_list);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -636,9 +638,6 @@ sub _write {
     my @written;
     my $written = 0;
     my $end;
-
-    my $selin = '';
-    vec($selin, fileno($sftp->{ssh_in}), 1) = 1;
 
     while (!$end or @msgid) {
 	while (!$end and @msgid < $qsize) {
@@ -1515,13 +1514,9 @@ sub get {
     my @msgid;
     my @askoff;
     my $loff = $askoff;
-    my $rfno = fileno($sftp->{ssh_in});
     my $adjustment = 0;
-    my $selin = '';
     my $n = 0;
     local $\;
-
-    vec ($selin, $rfno, 1) = 1;
 
     while (1) {
 	# request a new block if queue is not full
@@ -1908,7 +1903,6 @@ sub put {
     # if lsize is undef, we initialize it to $writeoff:
     $lsize += $writeoff if ($append or not defined $lsize);
 
-    my $rfno = fileno($sftp->{ssh_in});
     # when a converter is used, the EOF can become delayed by the
     # buffering introduced, we use $eof_t to account for that.
     my ($eof, $eof_t);
