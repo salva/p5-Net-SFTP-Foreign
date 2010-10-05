@@ -1,5 +1,8 @@
 #!/usr/bin/perl
 
+# This script has not being updated and still uses the Net::SFTP API
+# available from the adapter module Net::SFTP::Foreign::Compat.
+
 use strict;
 use warnings;
 

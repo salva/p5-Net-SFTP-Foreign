@@ -21,7 +21,10 @@ our @EXPORT = qw( _sort_entries
 		  _hexdump
 		  $debug
                 );
-our @EXPORT_OK = qw( _do_nothing
+our @EXPORT_OK = qw( _is_lnk
+                     _is_dir
+                     _is_reg
+                     _do_nothing
 		     _glob_to_regex
                      _tcroak );
 
@@ -300,6 +303,10 @@ sub _gen_converter {
         croak "unknown conversion '$conversion'";
     }
 }
+
+sub _is_lnk { (0120000 & shift) == 0120000 }
+sub _is_dir { (0040000 & shift) == 0040000 }
+sub _is_reg { (0100000 & shift) == 0100000 }
 
 1;
 

@@ -1,12 +1,11 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.58_06';
+our $VERSION = '1.62';
 
 use strict;
 use warnings;
 use Carp qw(carp croak);
 
-use Fcntl qw(:mode);
 use Symbol ();
 use Errno ();
 use Scalar::Util;
@@ -30,7 +29,9 @@ BEGIN {
 # knowing anything about the Helpers package!
 our $debug;
 BEGIN { *Net::SFTP::Foreign::Helpers::debug = \$debug };
-use Net::SFTP::Foreign::Helpers;
+use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
+                                   _sort_entries _gen_wanted _gen_converter
+                                   _hexdump _ensure_list _catch_tainted_args);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -238,7 +239,8 @@ sub disconnect {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
         if ($windows) {
-            kill TERM => $pid and waitpid($pid, 0);
+	    kill KILL => $pid
+                and waitpid($pid, 0);
         }
         else {
 	    my $dirty = ( defined $sftp->{_dirty_cleanup}
@@ -453,7 +455,7 @@ sub setcwd {
         return undef unless defined $cwd;
 	my $a = $sftp->stat($cwd)
 	    or return undef;
-	if (S_ISDIR($a->perm)) {
+	if (_is_dir($a->perm)) {
 	    return $sftp->{cwd} = $cwd;
 	}
 	else {
@@ -636,9 +638,6 @@ sub _write {
     my @written;
     my $written = 0;
     my $end;
-
-    my $selin = '';
-    vec($selin, fileno($sftp->{ssh_in}), 1) = 1;
 
     while (!$end or @msgid) {
 	while (!$end and @msgid < $qsize) {
@@ -1515,13 +1514,9 @@ sub get {
     my @msgid;
     my @askoff;
     my $loff = $askoff;
-    my $rfno = fileno($sftp->{ssh_in});
     my $adjustment = 0;
-    my $selin = '';
     my $n = 0;
     local $\;
-
-    vec ($selin, $rfno, 1) = 1;
 
     while (1) {
 	# request a new block if queue is not full
@@ -1908,7 +1903,6 @@ sub put {
     # if lsize is undef, we initialize it to $writeoff:
     $lsize += $writeoff if ($append or not defined $lsize);
 
-    my $rfno = fileno($sftp->{ssh_in});
     # when a converter is used, the EOF can become delayed by the
     # buffering introduced, we use $eof_t to account for that.
     my ($eof, $eof_t);
@@ -2104,7 +2098,7 @@ sub ls {
 				   longname => $ln,
 				   a => $a };
 
-		    if ($follow_links and S_ISLNK($a->perm)) {
+		    if ($follow_links and _is_lnk($a->perm)) {
 
 			if ($a = $sftp->stat($sftp->join($dir, $fn))) {
 			    $entry->{a} = $a;
@@ -2183,7 +2177,7 @@ sub rremove {
 		 wanted => sub {
 		     my $e = $_[1];
 		     my $fn = $e->{filename};
-		     if (S_ISDIR($e->{a}->perm)) {
+		     if (_is_dir($e->{a}->perm)) {
 			 push @dirs, $e;
 		     }
 		     else {
@@ -2228,7 +2222,7 @@ sub get_symlink {
     $overwrite = 1 unless (defined $overwrite or $numbered);
 
     my $a = $sftp->lstat($remote) or return undef;
-    unless (S_ISLNK($a->perm)) {
+    unless (_is_lnk($a->perm)) {
 	$sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
 			  "Remote object '$remote' is not a symlink");
 	return undef;
@@ -2280,7 +2274,7 @@ sub put_symlink {
 			  "Couldn't stat local file '$local'", $!);
 	return undef;
     }
-    unless (S_ISLNK($perm)) {
+    unless (_is_lnk($perm)) {
 	$sftp->_set_error(SFTP_ERR_LOCAL_BAD_OBJECT,
 			  "Local file $local is not a symlink");
 	return undef;
@@ -2385,13 +2379,13 @@ sub rget {
 		 wanted => sub {
 		     my $e = $_[1];
 		     # print "file fn:$e->{filename}, a:$e->{a}\n";
-		     unless (S_ISDIR($e->{a}->perm)) {
+		     unless (_is_dir($e->{a}->perm)) {
 			 if (!$wanted or $wanted->($sftp, $e)) {
 			     my $fn = $e->{filename};
 			     if ($fn =~ $reremote) {
 				 my $lpath = File::Spec->catfile($local, $1);
                                  ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
-				 if (S_ISLNK($e->{a}->perm) and !$ignore_links) {
+				 if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				     if ($sftp->get_symlink($fn, $lpath,
 							    overwrite => $overwrite,
 							    numbered => $numbered,
@@ -2400,7 +2394,7 @@ sub rget {
 					 return undef;
 				     }
 				 }
-				 elsif (S_ISREG($e->{a}->perm)) {
+				 elsif (_is_reg($e->{a}->perm)) {
 				     if ($newer_only and -e $lpath
 					 and (CORE::stat _)[9] >= $e->{a}->mtime) {
 					 $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
@@ -2506,11 +2500,13 @@ sub rput {
 		    # print "descend: $e->{filename}\n";
 		    if (!$wanted or $wanted->($lfs, $e)) {
 			my $fn = $e->{filename};
+			$debug and $debug and 32768 and _debug "rput handling $fn";
 			if ($fn =~ $relocal) {
-			    my $rpath = $sftp->join($remote, $1);
+			    my $rpath = $sftp->join($remote, File::Spec->splitdir($1));
+			    $debug and $debug and 32768 and _debug "rpath: $rpath";
 			    if ($sftp->test_d($rpath)) {
 				$lfs->_set_error(SFTP_ERR_REMOTE_ALREADY_EXISTS,
-						 "remote directory '$rpath' already exists");
+						 "Remote directory '$rpath' already exists");
 				$lfs->_call_on_error($on_error, $e);
 				return 1;
 			    }
@@ -2537,12 +2533,14 @@ sub rput {
 		wanted => sub {
 		    my $e = $_[1];
 		    # print "file fn:$e->{filename}, a:$e->{a}\n";
-		    unless (S_ISDIR($e->{a}->perm)) {
+		    unless (_is_dir($e->{a}->perm)) {
 			if (!$wanted or $wanted->($lfs, $e)) {
 			    my $fn = $e->{filename};
+			    $debug and $debug and 32768 and _debug "rput handling $fn";
 			    if ($fn =~ $relocal) {
-				my $rpath = $sftp->join($remote, $1);
-				if (S_ISLNK($e->{a}->perm) and !$ignore_links) {
+				my (undef, $d, $f) = File::Spec->splitpath($1);
+				my $rpath = $sftp->join($remote, File::Spec->splitdir($d), $f);
+				if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				    if ($sftp->put_symlink($fn, $remote,
 							   overwrite => $overwrite,
 							   numbered => $numbered)) {
@@ -2551,7 +2549,7 @@ sub rput {
 				    }
 				    $lfs->_copy_error($sftp);
 				}
-				elsif (S_ISREG($e->{a}->perm)) {
+				elsif (_is_reg($e->{a}->perm)) {
 				    my $ra;
 				    if ( $newer_only and
 					 $ra = $sftp->stat($rpath) and
@@ -2628,7 +2626,7 @@ sub mget {
     require File::Spec;
     for my $e (@remote) {
 	my $perm = $e->{a}->perm;
-	if (S_ISDIR($perm)) {
+	if (_is_dir($perm)) {
 	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
 			      "Remote object '$e->{filename}' is a directory");
 	}
@@ -2639,7 +2637,7 @@ sub mget {
 	    $local = File::Spec->catfile($localdir, $local)
 		if defined $localdir;
 
-	    if (S_ISLNK($perm)) {
+	    if (_is_lnk($perm)) {
 		next if $ignore_links;
 		$sftp->get_symlink($fn, $local, %get_symlink_opts);
 	    }
@@ -2683,7 +2681,7 @@ sub mput {
     require File::Spec;
     for my $e (@local) {
 	my $perm = $e->{a}->perm;
-	if (S_ISDIR($perm)) {
+	if (_is_dir($perm)) {
 	    $sftp->_set_error(SFTP_ERR_REMOTE_BAD_OBJECT,
 			      "Remote object '$e->{filename}' is a directory");
 	}
@@ -2693,7 +2691,7 @@ sub mput {
 	    $remote = $sftp->join($remotedir, $remote)
 		if defined $remotedir;
 	    
-	    if (S_ISLNK($perm)) {
+	    if (_is_lnk($perm)) {
 		next if $ignore_links;
 		$sftp->put_symlink($fn, $remote, %put_symlink_opts);
 	    }
@@ -4408,7 +4406,7 @@ Sends a C<SSH_FXP_SYMLINK> command to create a new symbolic link
 C<$sl> pointing to C<$target>.
 
 C<$target> is stored as-is, without any path expansion taken place on
-it. User C<realpath> to normalize it:
+it. Use C<realpath> to normalize it:
 
   $sftp->symlink("foo.lnk" => $sftp->realpath("../bar"))
 
@@ -4556,8 +4554,8 @@ B<A>: A bug in plink breaks it.
 
 As a work around, you can use plink C<-pw> argument to pass the
 password on the command line, but it is B<highly insecure>, anyone
-with a shell account on the machine would be able to get the password.
-Use at your own risk!:
+with a shell account on the local machine would be able to get the
+password. Use at your own risk!:
 
   # HIGHLY INSECURE!!!
   my $sftp = Net::SFTP::Foreign->new('foo@bar',
@@ -4594,6 +4592,20 @@ closed.
 Send me a bug report containing a dump of your $sftp object so I
 can add code for your particular server software to activate the
 work-around automatically.
+
+=item Put method fails even with late_set_perm set
+
+B<Q>: I added C<late_set_perm =E<gt> 1> to the put call, but we are still
+receiving the error "Couldn't setstat remote file (setstat)".
+
+B<A>: Some servers forbid the SFTP C<setstat> operation used by the
+C<put> method for replicating the file permissions and timestamps on
+the remote side.
+
+As a work around you can just disable the feature:
+
+  $sftp->put($local_file, $remote_file,
+             copy_perms => 0, copy_time => 0);
 
 =item Disable password authentication completely
 

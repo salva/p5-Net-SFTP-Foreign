@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.58_05';
+our $VERSION = '1.58_07';
 
 use strict;
 use warnings;
@@ -289,10 +289,10 @@ sub _do_io {
             if (vec($wv1, $fnoout, 1)) {
                 my $written = syswrite($sftp->{ssh_out}, $$bout, 64 * 1024);
                 if ($debug and $debug & 32) {
-		    _debug (sprintf "_do_io write queue: %d, syswrite: %s, max: %d",
+		    _debug (sprintf "_do_io write queue: %d, syswrite: %s, max: %d, \$!: %s",
 			    length $$bout,
 			    (defined $written ? $written : 'undef'),
-			    64 * 1024);
+			    64 * 1024, $!);
 		    $debug & 2048 and $written and _hexdump(substr($$bout, 0, $written));
 		}
                 unless ($written) {
@@ -304,9 +304,10 @@ sub _do_io {
             if (vec($rv1, $fnoin, 1)) {
                 my $read = sysread($sftp->{ssh_in}, $$bin, 64 * 1024, length($$bin));
                 if ($debug and $debug & 32) {
-		    _debug (sprintf "_do_io read sysread: %s, total read: %d",
+		    _debug (sprintf "_do_io read sysread: %s, total read: %d, \$!: %s",
 			    (defined $read ? $read : 'undef'),
-			    length $$bin);
+			    length $$bin,
+			    $!);
 		    $debug & 1024 and $read and _hexdump(substr($$bin, -$read));
 		}
                 unless ($read) {
