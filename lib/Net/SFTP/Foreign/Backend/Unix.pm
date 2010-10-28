@@ -98,6 +98,7 @@ sub _init_transport {
 	my $stderr_discard = delete $opts->{stderr_discard};
 	my $stderr_fh = ($stderr_discard ? undef : delete $opts->{stderr_fh});
         my $open2_cmd = delete $opts->{open2_cmd};
+        my $ssh_cmd_interface = delete $opts->{ssh_cmd_interface};
 
 	my @open2_cmd;
         if (defined $open2_cmd) {
@@ -111,11 +112,10 @@ sub _init_transport {
             $ssh_cmd = 'ssh' unless defined $ssh_cmd;
             @open2_cmd = ($ssh_cmd);
 
-            my $ssh_cmd_interface = delete $opts->{ssh_cmd_interface};
             unless (defined $ssh_cmd_interface) {
-                $ssh_cmd_interface = ( $ssh_cmd =~ /\bplink(?:\.exe)?$/i
-                                       ? 'plink'
-                                       : 'ssh');
+                $ssh_cmd_interface = ( $ssh_cmd =~ /\bplink(?:\.exe)?$/i ? 'plink'  :
+                                       $ssh_cmd =~ /\bsshg3$/i           ? 'tectia' :
+                                                                           'ssh'    );
             }
 
             my $port = delete $opts->{port};
@@ -138,6 +138,8 @@ sub _init_transport {
 				      -o => 'PreferredAuthentications=keyboard-interactive,password');
 		}
             }
+            elsif ($ssh_cmd_interface eq 'tectia') {
+            }
             else {
                 die "Unsupported ssh_cmd_interface '$ssh_cmd_interface'";
             }
@@ -146,6 +148,15 @@ sub _init_transport {
             push @open2_cmd, $host;
 	    push @open2_cmd, ($ssh1 ? "/usr/lib/sftp-server" : -s => 'sftp');
         }
+
+        my $redirect_stderr_to_tty = ( (defined $pass or defined $passphrase) and
+                                       (delete $opts->{redirect_stderr_to_tty} or
+                                        $ssh_cmd_interface eq 'tectia' ) );
+
+        $redirect_stderr_to_tty and ($stderr_discard or $stderr_fh)
+            and croak "stderr_discard or stderr_fh can not be used together with password/passphrase "
+                          . "authentication when Tectia client is used";
+
 	_debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
 
 	%$opts and return; # Net::SFTP::Foreign will find the
@@ -185,6 +196,8 @@ sub _init_transport {
 		$expect->raw_pty(1);
 		$expect->log_user($expect_log_user);
 
+                $redirect_stderr_to_tty and $stderr_fh = $pty;
+
 		$child = _open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
 
 		if (defined $child and !$child) {
@@ -196,6 +209,9 @@ sub _init_transport {
 		# $pty->close_slave();
 	    }
 	    else {
+                $redirect_stderr_to_tty and
+                    croak "In order to support password/passphrase authentication with the Tectia client, " .
+                        "IPC::Open3 version 1.0105 is required (current version is $IPC::Open3::VERSION)";
 		$expect = Expect->new;
 		$expect->raw_pty(1);
 		$expect->log_user($expect_log_user);
