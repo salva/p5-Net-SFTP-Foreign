@@ -1,5 +1,7 @@
 Revision history for Net::SFTP::Foreign
 
+1.63_01
+        - support for Tectia client added (bug report by Russ Brewer)
 
 1.62  Oct 5, 2010
         - _catch_tainted_args was not being imported from helpers (bug
