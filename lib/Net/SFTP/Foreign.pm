@@ -3173,11 +3173,11 @@ to an array of arguments. For instance:
   more => "-i $key"    # wrong!!!
   more => [-i => $key] # right
 
-=item ssh_cmd_interface =E<gt> 'plink' or 'ssh'
+=item ssh_cmd_interface =E<gt> 'plink' or 'ssh' or 'tectia'
 
 declares the command line interface that the SSH client used to
-connect to the remote host understands. Currently C<plink> and C<ssh>
-are supported.
+connect to the remote host understands. Currently C<plink>, C<ssh> and
+C<tectia> are supported.
 
 This option would be rarely required as the module infers the
 interface from the SSH command name.
@@ -4703,6 +4703,8 @@ C<symlink> method will interpret its arguments in reverse order.
 =back
 
 Also, the following features should be considered experimental:
+
+- support for Tectia server
 
 - redirecting SSH stderr stream
 
