@@ -193,7 +193,7 @@ sub new {
     $sftp->{_dirty_cleanup} = delete $opts{dirty_cleanup};
 
     $sftp->{_timeout} = delete $opts{timeout};
-    defined $sftp->{$timeout} and $sftp->{$timeout} <= 0 and croak "invalid timeout $timeout!";
+    defined $sftp->{_timeout} and $sftp->{_timeout} <= 0 and croak "invalid timeout";
 
     $sftp->{_fs_encoding} = delete $opts{fs_encoding};
     if (defined $sftp->{_fs_encoding}) {
