@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Windows;
 
-our $VERSION = '1.58_05';
+our $VERSION = '1.63_02';
 
 use strict;
 use warnings;
@@ -67,14 +67,16 @@ sub _do_io {
 	substr($$bout, 0, $written, "");
     }
 
+    defined $timeout and $timeout <= 0 and return;
+
     _sysreadn($sftp, 4) or return undef;
 
     my $len = 4 + unpack N => $$bin;
     if ($len > 256 * 1024) {
-	$sftp->_set_status(SSH2_FX_BAD_MESSAGE);
-	$sftp->_set_error(SFTP_ERR_REMOTE_BAD_MESSAGE,
-			  "bad remote message received");
-	return undef;
+        $sftp->_set_status(SSH2_FX_BAD_MESSAGE);
+        $sftp->_set_error(SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          "bad remote message received");
+        return undef;
     }
     _sysreadn($sftp, $len);
 }
