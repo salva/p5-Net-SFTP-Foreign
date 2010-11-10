@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.63_04
+        - several spelling corrections (contributed by Philippe Bruhat)
+
 1.63_03  Nov 10, 2010
         - On some OSs (i.e. AIX) reading/writing from non-blocking fds
           can result in EAGAIN even when select has indicated that

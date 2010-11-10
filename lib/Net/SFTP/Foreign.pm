@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.63_03';
+our $VERSION = '1.63_04';
 
 use strict;
 use warnings;
@@ -3081,7 +3081,7 @@ Why should I prefer Net::SFTP::Foreign over L<Net::SFTP>?
 
 Well, both modules have their pros and cons:
 
-Net::SFTP::Foreign does not requiere a bunch of additional modules and
+Net::SFTP::Foreign does not require a bunch of additional modules and
 external libraries to work, just the OpenBSD SSH client (or any other
 client compatible enough).
 
@@ -3328,7 +3328,7 @@ The acceptable values for C<$ad> are:
 
 Never try to disconnect this object when exiting from any process.
 
-On most operative systems, the SSH process will exit when the last
+On most operating systems, the SSH process will exit when the last
 process connected to it ends, but this is not guaranteed.
 
 =item 1
@@ -3685,7 +3685,7 @@ directories):
 
 =item wanted =E<gt> qr/.../
 
-Only elements which filename match the regular expresion are included
+Only elements which filename match the regular expression are included
 on the listing.
 
 =item wanted =E<gt> sub {...}
@@ -3812,7 +3812,7 @@ also actived.
 
 =item ordered =E<gt> 1
 
-By default, the file system is searched in an implementation dependant
+By default, the file system is searched in an implementation dependent
 order (actually optimized for low memory comsumption). If this option
 is included, the file system is searched in a deep-first, sorted by
 filename fashion.
@@ -3896,7 +3896,7 @@ sensitive fashion, this flag changes it to be case insensitive.
 
 =item strict_leading_dot =E<gt> 0
 
-by default, a dot character at the begining of a file or directory
+by default, a dot character at the beginning of a file or directory
 name is not matched by willcards (C<*> or C<?>). Setting this flags to
 a false value changes this behaviour.
 
@@ -4277,7 +4277,7 @@ Returns true on success and undef on failure.
 =item $sftp-E<gt>opendir($path)
 
 Sends a C<SSH_FXP_OPENDIR> command to open the remote directory
-C<$path>, and returns an open handle on success (unfortunatelly,
+C<$path>, and returns an open handle on success (unfortunately,
 current versions of perl does not support directory operations via
 tied handles, so it is not possible to use the returned handle as a
 native one).
@@ -4649,7 +4649,7 @@ with the following error:
 B<A>: That probably means that the public key from the remote server
 is not stored in the C<~/.ssh/known_hosts> file. Run an SSH Connection
 from the command line as the same user as the script and answer C<yes>
-when asked to confirm the key suplied.
+when asked to confirm the key supplied.
 
 Example:
 
@@ -4685,7 +4685,7 @@ are welcome!
 
 =item - Dirty cleanup:
 
-On some operative systems, closing the pipes used to comunicate with
+On some operating systems, closing the pipes used to comunicate with
 the slave SSH process does not terminate it and a work around has to
 be applied. If you find that your scripts hung when the $sftp object
 gets out of scope, try setting C<$Net::SFTP::Foreign::dirty_cleanup>
