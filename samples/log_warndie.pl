@@ -8,7 +8,7 @@ use Net::SFTP::Foreign;
 
 use Log::WarnDie;
 # Log::WarnDie is missing FILENO method, just patch it in...
-sub Log::WarnDie::FILENO { -1 }
+sub Log::WarnDie::FILENO { 2 }
 
 use Log::Dispatch;
 use Log::Dispatch::File;
