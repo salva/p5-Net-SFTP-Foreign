@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.63_01';
+our $VERSION = '1.63_03';
 
 use strict;
 use warnings;
@@ -311,11 +311,13 @@ sub _do_io {
 			    64 * 1024, $!);
 		    $debug & 2048 and $written and _hexdump(substr($$bout, 0, $written));
 		}
-                unless ($written) {
+                if ($written) {
+                    substr($$bout, 0, $written, '');
+                }
+                elsif ($! != Errno::EAGAIN() and $! != Errno::EINTR()) {
                     $sftp->_conn_lost;
                     return undef;
                 }
-                substr($$bout, 0, $written, '');
             }
             if (vec($rv1, $fnoin, 1)) {
                 my $read = sysread($sftp->{ssh_in}, $$bin, 64 * 1024, length($$bin));
@@ -326,7 +328,7 @@ sub _do_io {
 			    $!);
 		    $debug & 1024 and $read and _hexdump(substr($$bin, -$read));
 		}
-                unless ($read) {
+                if (!$read and $! != Errno::EAGAIN() and $! != Errno::EINTR()) {
                     $sftp->_conn_lost;
                     return undef;
                 }
@@ -334,7 +336,7 @@ sub _do_io {
         }
         else {
             $debug and $debug & 32 and _debug "_do_io select failed: $!";
-            next if ($n < 0 and $! == Errno::EINTR());
+            next if ($n < 0 and ($! == Errno::EINTR() or $! == Errno::EAGAIN()));
             return undef;
         }
     }
