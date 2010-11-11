@@ -20,7 +20,7 @@ sub _defaults {
 }
 
 sub _init_transport_streams {
-    my ($self, $sftp) = @_;
+    my ($backend, $sftp) = @_;
     binmode $sftp->{ssh_in};
     binmode $sftp->{ssh_out};
 }
@@ -33,6 +33,29 @@ sub _open_dev_null {
 	return;
     }
     $dev_null
+}
+
+# workaround for IPC::Open3 not working with tied filehandles even
+# when they implement FILENO
+sub _open3 {
+    my $backend = shift;
+    my $sftp = shift;
+    if (tied(*STDERR)) {
+	my $fn = eval { defined $_[2] ? fileno $_[2] : fileno *STDERR };
+	unless (defined $fn and $fn >= 0) {
+	    $sftp->_conn_failed("STDERR or stderr_fh is not a real file handle");
+	    return;
+	}
+	local *STDERR;
+	unless (open STDERR, ">&=$fn") {
+	    $sftp->_conn_failed("Unable to untie STDERR");
+	    return;
+	}
+	$backend->SUPER::_open3($sftp, @_);
+    }
+    else {
+	$backend->SUPER::_open3($sftp, @_);
+    }
 }
 
 sub _sysreadn {
@@ -51,7 +74,7 @@ sub _sysreadn {
 }
 
 sub _do_io {
-    my ($self, $sftp, $timeout) = @_;
+    my ($backend, $sftp, $timeout) = @_;
 
     return undef unless $sftp->{_connected};
 

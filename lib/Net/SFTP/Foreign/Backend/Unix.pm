@@ -22,7 +22,7 @@ sub _defaults {
 }
 
 sub _init_transport_streams {
-    my ($self, $sftp) = @_;
+    my (undef, $sftp) = @_;
     for my $dir (qw(ssh_in ssh_out)) {
 	binmode $sftp->{$dir};
 	my $flags = fcntl($sftp->{$dir}, F_GETFL, 0);
@@ -50,6 +50,7 @@ sub _ipc_open2_bug_workaround {
 }
 
 sub _open3 {
+    my $backend = shift;
     my $sftp = shift;
     if (defined $_[2]) {
 	my $sftp_err = $_[2];
@@ -70,7 +71,7 @@ sub _open3 {
 }
 
 sub _init_transport {
-    my ($class, $sftp, $opts) = @_;
+    my ($backend, $sftp, $opts) = @_;
 
     my $transport = delete $opts->{transport};
 
@@ -167,7 +168,7 @@ sub _init_transport {
         }
 
 	if ($stderr_discard) {
-	    $stderr_fh = $class->_open_dev_null($sftp) or return;
+	    $stderr_fh = $backend->_open_dev_null($sftp) or return;
 	}
 
         my $this_pid = $$;
@@ -198,7 +199,7 @@ sub _init_transport {
 
                 $redirect_stderr_to_tty and $stderr_fh = $pty;
 
-		$child = _open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
+		$child = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
 
 		if (defined $child and !$child) {
 		    $pty->make_slave_controlling_terminal;
@@ -247,7 +248,7 @@ sub _init_transport {
 	    $expect->close_slave();
         }
         else {
-	    $sftp->{pid} = _open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, @open2_cmd);
+	    $sftp->{pid} = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, @open2_cmd);
             _ipc_open2_bug_workaround $this_pid;
 
             unless (defined $sftp->{pid}) {
@@ -256,12 +257,12 @@ sub _init_transport {
             }
         }
     }
-    $class->_init_transport_streams($sftp);
+    $backend->_init_transport_streams($sftp);
 }
 
 
 sub _do_io {
-    my ($self, $sftp, $timeout) = @_;
+    my (undef, $sftp, $timeout) = @_;
 
     $debug and $debug & 32 and _debug(sprintf "_do_io connected: %s", $sftp->{_connected} || 0);
 
