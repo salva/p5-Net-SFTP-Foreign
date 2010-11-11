@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Windows;
 
-our $VERSION = '1.63_04';
+our $VERSION = '1.63_05';
 
 use strict;
 use warnings;
@@ -28,8 +28,8 @@ sub _init_transport_streams {
 sub _open_dev_null {
     my $sftp = shift;
     my $dev_null;
-    unless (open $dev_null, '>', "NUL:") {
-	$sftp->_conn_failed("Unable to redirect stderr to NUL:");
+    unless (open $dev_null, '>', 'NUL:') {
+	$sftp->_conn_failed("Unable to redirect stderr for slave SSH process to NUL: $!");
 	return;
     }
     $dev_null
@@ -43,12 +43,12 @@ sub _open3 {
     if (tied(*STDERR)) {
 	my $fn = eval { defined $_[2] ? fileno $_[2] : fileno *STDERR };
 	unless (defined $fn and $fn >= 0) {
-	    $sftp->_conn_failed("STDERR or stderr_fh is not a real file handle");
+	    $sftp->_conn_failed("STDERR or stderr_fh is not a real file handle: " . (length $@ ? $@ : $!));
 	    return;
 	}
 	local *STDERR;
 	unless (open STDERR, ">&=$fn") {
-	    $sftp->_conn_failed("Unable to untie STDERR");
+	    $sftp->_conn_failed("Unable to reattach STDERR to fd $fn: $!");
 	    return;
 	}
 	$backend->SUPER::_open3($sftp, @_);

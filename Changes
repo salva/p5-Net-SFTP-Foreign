@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.63_05
+        - better error messages
+
 1.63_04	 Nov 11, 2010
 	- workaround for IPC::Open3::open3 not working with tied file
           handles on Windows (bug report by Barnabas Bona)
