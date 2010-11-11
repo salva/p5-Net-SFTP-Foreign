@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.63_03';
+our $VERSION = '1.63_04';
 
 use strict;
 use warnings;
