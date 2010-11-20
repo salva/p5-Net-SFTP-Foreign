@@ -255,6 +255,11 @@ sub _init_transport {
                 $sftp->_conn_failed("Bad ssh command", $!);
                 return;
             }
+            # do not propagate signals sent from the terminal to the
+            # slave SSH:
+            eval {
+                setpgrp($sftp->{pid}, 0);
+            };
         }
     }
     $backend->_init_transport_streams($sftp);
