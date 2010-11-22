@@ -78,6 +78,11 @@ sub _copy_error {
 
 sub error { shift->{_error} }
 
+sub die_on_error {
+    my $sftp = shift;
+    $sftp->{error} and croak(@_ ? "@_: $sftp->{error}" : $sftp->{error});
+}
+
 sub _set_errno {
     my $sftp = shift;
     if ($sftp->{_error}) {

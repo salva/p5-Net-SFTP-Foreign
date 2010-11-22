@@ -3044,8 +3044,7 @@ Net::SFTP::Foreign - SSH File Transfer Protocol client
 
     use Net::SFTP::Foreign;
     my $sftp = Net::SFTP::Foreign->new($host);
-    $sftp->error and
-       die "Unable to stablish SFTP connection: " . $sftp->error;
+    $sftp->die_on_error("Unable to establish SFTP connection");
 
     $sftp->setcwd($path) or die "unable to change cwd: " . $sftp->error;
 
@@ -3138,7 +3137,7 @@ An explicit check for errors should be included always after the
 constructor call:
 
   my $sftp = Net::SFTP::Foreign->new(...);
-  $sftp->error and die "SSH connection failed: " . $sftp->error;
+  $sftp->die_on_error("SSH connection failed");
 
 C<%args> can contain:
 
@@ -3371,6 +3370,14 @@ corresponding error string.
 
 See L<Net::SFTP::Foreign::Constants> for a list of possible error
 codes and how to import them on your scripts.
+
+=item $sftp-E<gt>die_on_error($msg)
+
+Convenience method:
+
+  $sftp->die_on_error("Something bad happened");
+  # is a shortcut for...
+  $sftp->error and die "Something bad happened: " . $sftp->error;
 
 =item $sftp-E<gt>status
 
@@ -4563,7 +4570,7 @@ password. Use at your own risk!:
   my $sftp = Net::SFTP::Foreign->new('foo@bar',
                                      ssh_cmd => 'plink',
                                      more => [-pw => $password]);
-  $sftp->error and die $sftp->error;
+  $sftp->die_on_error;
 
 =item Plink
 

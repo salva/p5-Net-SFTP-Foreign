@@ -1,6 +1,7 @@
 Revision history for Net::SFTP::Foreign
 
 1.63_05
+        - add die_on_error method
         - create a new process group for slave ssh process so that
           signals sent from the terminal are not propagated
         - better error messages
