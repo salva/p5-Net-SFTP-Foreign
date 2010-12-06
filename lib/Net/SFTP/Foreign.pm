@@ -1304,6 +1304,27 @@ sub symlink {
                             "Couldn't create symlink '$sl' pointing to '$target'");
 }
 
+sub hardlink {
+    @_ == 3 or croak 'Usage: $sftp->hardlink($hl, $target)';
+    ${^TAINT} and &_catch_tainted_args;
+
+    my ($sftp, $hl, $target) = @_;
+
+    $sftp->_check_extension('hardlink@openssh.com' => 1,
+                            SFTP_ERR_REMOTE_HARDLINK_FAILED,
+                            "hardlink failed")
+        or return undef;
+    $hl = $sftp->_rel2abs($hl);
+    $target = $sftp->_rel2abs($target);
+
+    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
+                                   str => 'hardlink@openssh.com',
+                                   str => $sftp->_fs_encode($target),
+                                   str => $sftp->_fs_encode($hl));
+    $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_HARDLINK_FAILED,
+                            "Couldn't create hardlink '$hl' pointing to '$target'");
+}
+
 sub _gen_save_status_method {
     my $method = shift;
     sub {
@@ -4419,6 +4440,13 @@ it. Use C<realpath> to normalize it:
 
   $sftp->symlink("foo.lnk" => $sftp->realpath("../bar"))
 
+=item $sftp-E<gt>hardlink($hl, $target)
+
+Creates a hardlink on the server.
+
+This command requires support for the 'hardlink@openssh.com' extension
+on the server (available in OpenSSH from version 5.7).
+
 =item $sftp-E<gt>statvfs($path)
 
 =item $sftp-E<gt>fstatvfs($fh)
@@ -4586,7 +4614,7 @@ Unixes now.
 B<Q>: put fails with the following error:
 
   Couldn't setstat remote file (fsetstat): The requested operation
-    cannot be performed because there is a file transfer in progress.
+  cannot be performed because there is a file transfer in progress.
 
 B<A>: Try passing the C<late_set_perm> option to the put method:
 
