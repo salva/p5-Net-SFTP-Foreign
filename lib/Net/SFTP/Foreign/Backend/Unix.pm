@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.63_04';
+our $VERSION = '1.63_06';
 
 use strict;
 use warnings;
@@ -197,7 +197,7 @@ sub _init_transport {
 		$expect->raw_pty(1);
 		$expect->log_user($expect_log_user);
 
-                $redirect_stderr_to_tty and $stderr_fh = $pty;
+                $redirect_stderr_to_tty and $stderr_fh = $pty->slave;
 
 		$child = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
 

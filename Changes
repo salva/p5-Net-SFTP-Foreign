@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.63_06  Dec 10, 2010
+        - redirect_stderr_to_tty was redirecting to the wrong side of
+          the tty (bug report by Russ Brewer)
+
 1.63_05  Dec 6, 2010
         - add support for hardlink@openssh.com extension
         - add die_on_error method
