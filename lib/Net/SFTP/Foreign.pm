@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.63_06';
+our $VERSION = '1.63_07';
 
 use strict;
 use warnings;
@@ -4794,7 +4794,7 @@ L<Test::SFTP> allows to run tests against a remote SFTP server.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2010 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2011 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 

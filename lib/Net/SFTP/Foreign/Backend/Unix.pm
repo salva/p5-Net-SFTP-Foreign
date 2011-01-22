@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.63_06';
+our $VERSION = '1.63_07';
 
 use strict;
 use warnings;
@@ -126,6 +126,7 @@ sub _init_transport {
             my $more = delete $opts->{more};
             carp "'more' argument looks like if it should be splited first"
                 if (defined $more and !ref($more) and $more =~ /^-\w\s+\S/);
+            my @more = _ensure_list $more;
 
             if ($ssh_cmd_interface eq 'plink') {
                 $pass and !$passphrase
@@ -135,8 +136,10 @@ sub _init_transport {
             elsif ($ssh_cmd_interface eq 'ssh') {
                 push @open2_cmd, -p => $port if defined $port;
 		if ($pass and !$passphrase) {
-		    push @open2_cmd, (-o => 'NumberOfPasswordPrompts=1',
-				      -o => 'PreferredAuthentications=keyboard-interactive,password');
+		    push @open2_cmd, -o => 'NumberOfPasswordPrompts=1';
+                    push @open2_cmd, -o => 'PreferredAuthentications=keyboard-interactive,password'
+                        unless grep { $more[$_] eq '-o' and
+                                      $more[$_ + 1] =~ /^PreferredAuthentications\W/ } 0..$#more-1;
 		}
             }
             elsif ($ssh_cmd_interface eq 'tectia') {
@@ -145,7 +148,7 @@ sub _init_transport {
                 die "Unsupported ssh_cmd_interface '$ssh_cmd_interface'";
             }
             push @open2_cmd, -l => $user if defined $user;
-            push @open2_cmd, _ensure_list($more) if defined $more;
+            push @open2_cmd, @more;
             push @open2_cmd, $host;
 	    push @open2_cmd, ($ssh1 ? "/usr/lib/sftp-server" : -s => 'sftp');
         }
