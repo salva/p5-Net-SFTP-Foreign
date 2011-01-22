@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.63_07';
+our $VERSION = '1.63_08';
 
 use strict;
 use warnings;
@@ -1026,8 +1026,8 @@ sub mkpath {
 	    last;
 	}
 	unless (length $path) {
-	    $sftp->set_error(SFTP_ERR_REMOTE_MKDIR_FAILED,
-			     "Unable to make path, bad root");
+	    $sftp->_set_error(SFTP_ERR_REMOTE_MKDIR_FAILED,
+                              "Unable to make path, bad root");
 	    return undef;
 	}
 	unshift @path, $p;

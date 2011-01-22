@@ -1,6 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
-1.63_07  Jan 20, 2010
+1.63_08  Jan 22, 2011
+        - bad method call inside mkpath (bug report and solution by
+          Adam Pingel)
+
+1.63_07  Jan 20, 2011
         - do not override PreferredAuthentication when explicitly set
           by the user (bug report and solution by Ave Wrigley)
 
