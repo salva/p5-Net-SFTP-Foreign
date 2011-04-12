@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.63_08';
+our $VERSION = '1.63_09';
 
 use strict;
 use warnings;
@@ -2788,7 +2788,7 @@ our @CARP_NOT = qw(Net::SFTP::Foreign Tie::Handle);
 my $gen_accessor = sub {
     my $ix = shift;
     sub {
-	my $st = *{shift()}->{ARRAY};
+	my $st = *{shift()}{ARRAY};
 	if (@_) {
 	    $st->[$ix] = shift;
 	}
@@ -2839,18 +2839,18 @@ sub _new_from_rid {
     my $self = Symbol::gensym;
     bless $self, $class;
     tie *$self, $self;
-    *{$self}->{ARRAY} = [ $sftp, $rid, 0, $flags, @_];
+    *$self = [ $sftp, $rid, 0, $flags, @_];
 
     $self;
 }
 
 sub _close {
     my $self = shift;
-    @{*$self->{ARRAY}} = ();
+    @{*{$self}{ARRAY}} = ();
 }
 
 sub _check {
-    return 1 if defined(*{shift()}->{ARRAY}[0]);
+    return 1 if defined(*{shift()}{ARRAY}[0]);
     $! = Errno::EBADF;
     undef;
 }
@@ -2864,21 +2864,21 @@ sub FILENO {
     "-1:sftp(0x$hrid)"
 }
 
-sub _sftp { *{shift()}->{ARRAY}[0] }
-sub _rid { *{shift()}->{ARRAY}[1] }
+sub _sftp { *{shift()}{ARRAY}[0] }
+sub _rid { *{shift()}{ARRAY}[1] }
 
 * _pos = $gen_accessor->(2);
 
 sub _inc_pos {
     my ($self, $inc) = @_;
-    *{shift()}->{ARRAY}[2] += $inc;
+    *{shift()}{ARRAY}[2] += $inc;
 }
 
 
 my %flag_bit = (append => 0x1);
 
 sub _flag {
-    my $st = *{shift()}->{ARRAY};
+    my $st = *{shift()}{ARRAY};
     my $fn = shift;
     my $flag = $flag_bit{$fn};
     Carp::croak("unknown flag $fn") unless defined $flag;
@@ -2931,8 +2931,8 @@ sub _new_from_rid {
 
 sub _check_is_file {}
 
-sub _bin { \(*{shift()}->{ARRAY}[4]) }
-sub _bout { \(*{shift()}->{ARRAY}[5]) }
+sub _bin { \(*{shift()}{ARRAY}[4]) }
+sub _bout { \(*{shift()}{ARRAY}[5]) }
 
 sub WRITE {
     my ($self, undef, $length, $offset) = @_;
@@ -3029,7 +3029,7 @@ sub _new_from_rid {
 
 sub _check_is_dir {}
 
-sub _cache { *{shift()}->{ARRAY}[4] }
+sub _cache { *{shift()}{ARRAY}[4] }
 
 *CLOSEDIR = $gen_proxy_method->('closedir');
 *READDIR = $gen_proxy_method->('_readdir');
