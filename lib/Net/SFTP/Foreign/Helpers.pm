@@ -207,7 +207,7 @@ sub _catch_tainted_args {
     my $i;
     for (@_) {
         next unless $i++;
-        if (tainted $_) {
+        if (tainted($_)) {
             my (undef, undef, undef, $subn) = caller 1;
             my $msg = ( $subn =~ /::([a-z]\w*)$/
                         ? "Insecure argument '$_' on '$1' method call"
@@ -215,7 +215,7 @@ sub _catch_tainted_args {
             _tcroak($msg);
         }
         elsif (ref($_)) {
-            for (grep tainted $_,
+            for (grep tainted($_),
 		 do { local ($@, $SIG{__DIE__}); eval { values %$_ }}) {
 		my (undef, undef, undef, $subn) = caller 1;
 		my $msg = ( $subn =~ /::([a-z]\w*)$/

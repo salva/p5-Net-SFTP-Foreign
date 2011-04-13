@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.63_10  Apr 13, 2011
+        - workaround bug in perl 5.6 calling STORE in a tied
+          filehandle
+        - solve "not enough arguments for grep" when using an old
+          version of Scalar::Util
+
 1.63_09  Apr 12, 2011
         - an error in the handler accessors was adding and useless
           wrapping layer

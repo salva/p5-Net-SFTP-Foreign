@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.63_09';
+our $VERSION = '1.63_10';
 
 use strict;
 use warnings;
@@ -2838,8 +2838,8 @@ sub _new_from_rid {
 
     my $self = Symbol::gensym;
     bless $self, $class;
-    tie *$self, $self;
     *$self = [ $sftp, $rid, 0, $flags, @_];
+    tie *$self, $self;
 
     $self;
 }
