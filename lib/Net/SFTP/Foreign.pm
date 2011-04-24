@@ -3230,7 +3230,7 @@ machine. The default value is C<utf8>.
 
 For instance:
 
-  $sftp = Net::SFTP::Foreign->new('user@host', fs_encoding => latin1);
+  $sftp = Net::SFTP::Foreign->new('user@host', fs_encoding => 'latin1');
 
 will convert any path name passed to any method in this package to its
 C<latin1> representation before sending it to the remote side.

@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.63_11
+        - minor doc corrections
+
 1.63_10  Apr 13, 2011
         - workaround bug in perl 5.6 calling STORE in a tied
           filehandle
