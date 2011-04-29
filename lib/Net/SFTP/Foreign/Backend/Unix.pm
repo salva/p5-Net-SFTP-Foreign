@@ -161,7 +161,7 @@ sub _init_transport {
             and croak "stderr_discard or stderr_fh can not be used together with password/passphrase "
                           . "authentication when Tectia client is used";
 
-	_debug "ssh cmd: @open2_cmd\n" if ($debug and $debug & 1);
+	$debug and $debug & 1 and _debug "ssh cmd: @open2_cmd\n";
 
 	%$opts and return; # Net::SFTP::Foreign will find the
                            # unhandled options and croak
