@@ -3204,12 +3204,6 @@ C<tectia> are supported.
 This option would be rarely required as the module infers the
 interface from the SSH command name.
 
-=item autoflush =E<gt> $bool
-
-by default, and for performance reasons, write operations are cached,
-and only when the write buffer becomes big enough is the data written to
-the remote file. Setting this flag makes the write operations inmediate.
-
 =item timeout =E<gt> $seconds
 
 when this parameter is set, the connection is dropped if no data
@@ -3330,6 +3324,33 @@ redirects stderr to /dev/null
 
 default C<block_size> and C<queue_size> used for read and write
 operations (see the C<put> or C<get> documentation).
+
+=item autoflush =E<gt> $bool
+
+by default, and for performance reasons, write operations are cached,
+and only when the write buffer becomes big enough is the data written to
+the remote file. Setting this flag makes the write operations inmediate.
+
+=item write_delay =E<gt> $bytes
+
+This option determines how many bytes are buffered before the real
+SFTP write operation is performed.
+
+=item read_ahead =E<gt> $bytes
+
+On read operations this option determines how many bytes to read in
+advance so that later read operations can be fulfilled from the
+buffer.
+
+Using a high value will increase the performance of the module for a
+sequential reads access pattern but degrade it for a short random
+reads access pattern. It can also cause synchronization problems if
+the file is concurrently modified by other parties (L</flush> can be
+used to discard all the data inside the read buffer on demand).
+
+The default value is set dynamically considering some runtime
+parameters and given options, though it tends to favor the sequential
+read access pattern.
 
 =item autodisconnect =E<gt> $ad
 

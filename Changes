@@ -1,6 +1,7 @@
 Revision history for Net::SFTP::Foreign
 
 1.63_11
+        - document the write_delay and read_ahead options
         - minor doc corrections
 
 1.63_10  Apr 13, 2011
