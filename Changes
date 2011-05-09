@@ -1,6 +1,7 @@
 Revision history for Net::SFTP::Foreign
 
-1.63_11
+1.64 May 09, 2011
+        - release as stable
         - document the write_delay and read_ahead options
         - minor doc corrections
 
