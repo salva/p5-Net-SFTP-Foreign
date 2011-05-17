@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.65 May 17, 2011
+        - die_on_error was broken
+
 1.64 May 09, 2011
         - release as stable
         - document the write_delay and read_ahead options
