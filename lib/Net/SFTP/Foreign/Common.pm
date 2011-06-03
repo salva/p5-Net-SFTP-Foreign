@@ -276,10 +276,16 @@ sub glob {
 
     my $wantarray = wantarray;
 
-    my @parts = ($glob =~ m{\G/*([^/]+)}g);
-    push @parts, '.' unless @parts;
-
-    my $top = ($glob =~ m|^/|) ? '/' : '.';
+    my (@parts, $top);
+    if (ref $glob eq 'Regexp') {
+        @parts = ($glob);
+        $top = '.';
+    }
+    else {
+        @parts = ($glob =~ m{\G/*([^/]+)}g);
+        push @parts, '.' unless @parts;
+        $top = ( $glob =~ m|^/|  ? '/' : '.');
+    }
     my @res = ( {filename => $top} );
     my $res = 0;
 
@@ -287,7 +293,14 @@ sub glob {
 	my @parents = @res;
 	@res = ();
 	my $part = shift @parts;
-	my ($re, $has_wildcards) = _glob_to_regex($part, $strict_leading_dot, $ignore_case);
+        my ($re, $has_wildcards);
+        if (ref $part eq 'Regexp') {
+            $re = $part;
+            $has_wildcards = 1;
+        }
+	else {
+            ($re, $has_wildcards) = _glob_to_regex($part, $strict_leading_dot, $ignore_case);
+        }
 
 	for my $parent (@parents) {
 	    my $pfn = $parent->{filename};
