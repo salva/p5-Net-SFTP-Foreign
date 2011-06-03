@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Common;
 
-our $VERSION = '1.57';
+our $VERSION = '1.65';
 
 use strict;
 use warnings;
@@ -80,7 +80,7 @@ sub error { shift->{_error} }
 
 sub die_on_error {
     my $sftp = shift;
-    $sftp->{error} and croak(@_ ? "@_: $sftp->{error}" : $sftp->{error});
+    $sftp->{_error} and croak(@_ ? "@_: $sftp->{_error}" : $sftp->{_error});
 }
 
 sub _set_errno {
