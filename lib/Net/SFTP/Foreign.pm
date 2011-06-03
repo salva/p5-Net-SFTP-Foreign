@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.65';
+our $VERSION = '1.66_01';
 
 use strict;
 use warnings;
@@ -3445,7 +3445,7 @@ Returns the new remote current working directory or undef on failure.
 
 =item $sftp-E<gt>get($remote, $local, %options)
 
-Copies remote file C<$remote> to local $local. By default file
+X<get>Copies remote file C<$remote> to local $local. By default file
 attributes are also copied (permissions, atime and mtime). For
 instance:
 
@@ -3812,7 +3812,7 @@ equivalent:
 
 =item $sftp-E<gt>find(\@paths, %opts)
 
-Does a recursive search over the given directory C<$path> (or
+X<find>Does a recursive search over the given directory C<$path> (or
 directories C<@path>) and returns a list of the entries found or the
 total number of them on scalar context.
 
@@ -3929,12 +3929,16 @@ equivalent:
 
 =item $sftp-E<gt>glob($pattern, %opts)
 
-performs a remote glob and returns the list of matching entries in the
-same format as the L</find> method.
+X<glob>performs a remote glob and returns the list of matching entries
+in the same format as the L</find> method.
 
 This method tries to recover and continue under error conditions.
 
-The options accepted:
+The given pattern can be a Unix style pattern (see L<glob(7)>) or a
+Regexp object (i.e C<qr/foo/>). In the later case, only files on the
+current working directory will be matched against the Regexp.
+
+Accepted options:
 
 =over 4
 
@@ -3943,11 +3947,15 @@ The options accepted:
 by default the matching over the file system is carried out in a case
 sensitive fashion, this flag changes it to be case insensitive.
 
+This flag is ignored when a Regexp object is used as the pattern.
+
 =item strict_leading_dot =E<gt> 0
 
 by default, a dot character at the beginning of a file or directory
 name is not matched by willcards (C<*> or C<?>). Setting this flags to
 a false value changes this behaviour.
+
+This flag is ignored when a Regexp object is used as the pattern.
 
 =item follow_links =E<gt> 1
 
@@ -3966,6 +3974,17 @@ a false value changes this behaviour.
 these options perform as on the C<ls> method.
 
 =back
+
+Some usage samples:
+
+  my $files = $sftp->glob("*/lib");
+
+  my $files = $sftp->glob("/var/log/dmesg.*.gz");
+
+  $sftp->set_cwd("/var/log");
+  my $files = $sftp->glob(qr/^dmesg\.[\d+]\.gz$/);
+
+  my $files = $sftp->glob("*/*.pdf", strict_leading_dot => 0);
 
 =item $sftp-E<gt>rget($remote, $local, %opts)
 
@@ -4142,8 +4161,8 @@ Allow to select which file system objects have to be deleted.
 
 =item $sftp-E<gt>mget(\@remote, $localdir, %opts)
 
-expands the wildcards on C<$remote> or C<@remote> and retrieves all
-the matching files.
+X<mget>expands the wildcards on C<$remote> or C<@remote> and retrieves
+all the matching files.
 
 For instance:
 
@@ -4301,7 +4320,7 @@ reports whether the remote file handler points at the end of the file.
 
 =item $sftp-E<gt>flush($fh)
 
-writes to the remote file any pending data and discards the read
+X<flush>writes to the remote file any pending data and discards the read
 cache.
 
 =item $sftp-E<gt>sftpread($handle, $offset, $length)
