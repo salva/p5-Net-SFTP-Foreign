@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.66_01';
+our $VERSION = '1.66_02';
 
 use strict;
 use warnings;
@@ -3524,7 +3524,7 @@ will copy the remote file as "data.txt" the first time and as
 =item conversion =E<gt> $conversion
 
 on the fly data conversion of the file contents can be performed with
-this option. See L</On the fly data conversion> bellow.
+this option. See L</On the fly data conversion> below.
 
 =item callback =E<gt> $callback
 
@@ -3649,7 +3649,7 @@ the remote file is newer than the local one.
 =item conversion =E<gt> $conversion
 
 on the fly data conversion of the file contents can be performed with
-this option. See L</On the fly data conversion> bellow.
+this option. See L</On the fly data conversion> below.
 
 =item callback =E<gt> $callback
 
