@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.63_07';
+our $VERSION = '1.67';
 
 use strict;
 use warnings;
@@ -274,14 +274,19 @@ sub _init_transport {
                 $sftp->_conn_failed("Bad ssh command", $!);
                 return;
             }
-            # do not propagate signals sent from the terminal to the
-            # slave SSH:
-            eval {
-                setpgrp($sftp->{pid}, 0);
-            };
         }
     }
     $backend->_init_transport_streams($sftp);
+}
+
+sub _after_init {
+    my ($backend, $sftp) = @_;
+    unless ($sftp->error) {
+        # do not propagate signals sent from the terminal to the
+        # slave SSH:
+        local ($@, $!);
+        eval { setpgrp($sftp->{pid}, 0) };
+    }
 }
 
 sub _do_io {

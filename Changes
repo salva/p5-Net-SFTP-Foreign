@@ -1,6 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
-1.66_02
+1.67  Jul 4, 2011
+        - released as stable in order to solve critical bug:
+        - solve regresion introduced in 1.63_05 that caused ssh to
+          hang when trying to access the tty
+
         - pass password to plink via -pw and generate a warning when
           doing so
         - support for key_path constructor argument

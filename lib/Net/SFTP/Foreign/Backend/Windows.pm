@@ -58,6 +58,8 @@ sub _open3 {
     }
 }
 
+sub _after_init {}
+
 sub _sysreadn {
     my ($sftp, $n) = @_;
     my $bin = \$sftp->{_bin};

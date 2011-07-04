@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.66_02';
+our $VERSION = '1.67';
 
 use strict;
 use warnings;
@@ -213,6 +213,7 @@ sub new {
     %opts and _croak_bad_options(keys %opts);
 
     $sftp->_init unless $sftp->error;
+    $backend->_after_init($sftp);
     $sftp
 }
 
