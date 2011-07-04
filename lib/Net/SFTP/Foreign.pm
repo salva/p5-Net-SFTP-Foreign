@@ -4847,20 +4847,6 @@ SSH_FXP_SYMLINK command that seems to be the de facto standard. When
 interacting with SFTP servers that follow the SFTP specification, the
 C<symlink> method will interpret its arguments in reverse order.
 
-=item - Plink fails on Unix:
-
-It seems that an obscure bug in plink that hangs it is triggered by
-Net::SFTP::Foreign. A workaround is to redirect stderr to /dev/null as
-follows:
-
-  $sftp = Net::SFTP::Foreign->new($host,
-                                  ssh_cmd => 'plink',
-                                  stderr_discard => 1);
-
-I have not dedicated too much effort to investigate that bug as I
-don't expect anybody to be using plink on a Unix system... if you need
-it, just let me know!.
-
 =back
 
 Also, the following features should be considered experimental:

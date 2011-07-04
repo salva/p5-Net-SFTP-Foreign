@@ -1,6 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
 1.66_02
+        - pass password to plink via -pw and generate a warning when
+          doing so
         - support for key_path constructor argument
         - support for autodie mode
         - docs misspelling errors corrected (reported by Michael

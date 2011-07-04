@@ -154,7 +154,7 @@ sub _init_transport {
                 if (@preferred_authentications
                     and not grep { $more[$_] eq '-o' and
                                        $more[$_ + 1] =~ /^PreferredAuthentications\W/ } 0..$#more-1) {
-                    push @open2_cmd, join(',', @preferred_authentications);
+                    push @open2_cmd, -o => 'PreferredAuthentications=' . join(',', @preferred_authentications);
                 }
             }
             elsif ($ssh_cmd_interface eq 'tectia') {
@@ -283,7 +283,6 @@ sub _init_transport {
     }
     $backend->_init_transport_streams($sftp);
 }
-
 
 sub _do_io {
     my (undef, $sftp, $timeout) = @_;
