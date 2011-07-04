@@ -59,7 +59,9 @@ sub _set_error {
 	    $str = $code ? "Unknown error $code" : "OK";
 	}
         $debug and $debug & 64 and _debug("_set_err code: $code, str: $str");
-	return $sftp->{_error} = dualvar $code, $str;
+	my $error = $sftp->{_error} = dualvar $code, $str;
+        croak $error if $sftp->{_autodie};
+        return $error;
     }
     else {
 	return $sftp->{_error} = 0;
@@ -131,6 +133,7 @@ sub find {
     my $dirs = delete $opts{dirs};
     my $follow_links = delete $opts{follow_links};
     my $on_error = delete $opts{on_error};
+    local $self->{_autodie} if $on_error;
     my $realpath = delete $opts{realpath};
     my $ordered = delete $opts{ordered};
     my $names_only = delete $opts{names_only};
@@ -262,6 +265,7 @@ sub glob {
     return () if $glob eq '';
 
     my $on_error = delete $opts{on_error};
+    local $sftp->{_autodie} if $on_error;
     my $follow_links = delete $opts{follow_links};
     my $ignore_case = delete $opts{ignore_case};
     my $names_only = delete $opts{names_only};
