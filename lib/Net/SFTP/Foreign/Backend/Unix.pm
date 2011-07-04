@@ -137,11 +137,13 @@ sub _init_transport {
             }
 
             if ($ssh_cmd_interface eq 'plink') {
+                push @open2_cmd, -P => $port if defined $port;
                 if ($pass and !$passphrase) {
+                    warnings::warnif("Net::SFTP::Foreign", "using insecure password authentication with plink");
                     push @open2_cmd, -pw => $pass;
                     undef $pass;
                 }
-                push @open2_cmd, -P => $port if defined $port;
+
             }
             elsif ($ssh_cmd_interface eq 'ssh') {
                 push @open2_cmd, -p => $port if defined $port;
@@ -149,17 +151,16 @@ sub _init_transport {
 		    push @open2_cmd, -o => 'NumberOfPasswordPrompts=1';
                     push @preferred_authentications, ('keyboard-interactive', 'password');
 		}
+                if (@preferred_authentications
+                    and not grep { $more[$_] eq '-o' and
+                                       $more[$_ + 1] =~ /^PreferredAuthentications\W/ } 0..$#more-1) {
+                    push @open2_cmd, join(',', @preferred_authentications);
+                }
             }
             elsif ($ssh_cmd_interface eq 'tectia') {
             }
             else {
                 die "Unsupported ssh_cmd_interface '$ssh_cmd_interface'";
-            }
-
-            if (@preferred_authentications
-                and not grep { $more[$_] eq '-o' and
-                                   $more[$_ + 1] =~ /^PreferredAuthentications\W/ } 0..$#more-1) {
-                push @open2_cmd, join(',', @preferred_authentications);
             }
 
             push @open2_cmd, -l => $user if defined $user;

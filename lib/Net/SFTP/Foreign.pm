@@ -4,6 +4,8 @@ our $VERSION = '1.66_02';
 
 use strict;
 use warnings;
+use warnings::register;
+
 use Carp qw(carp croak);
 
 use Symbol ();
@@ -3243,8 +3245,8 @@ to an array of arguments. For instance:
 
   more => '-v'         # right
   more => ['-v']       # right
-  more => "-i $key"    # wrong!!!
-  more => [-i => $key] # right
+  more => "-c $cipher"    # wrong!!!
+  more => [-c => $cipher] # right
 
 =item ssh_cmd_interface =E<gt> 'plink' or 'ssh' or 'tectia'
 
@@ -3284,6 +3286,10 @@ Note that this option will not affect file contents in any way.
 
 This feature is not supported in perl 5.6 due to incomplete Unicode
 support in the interpreter.
+
+=item key_path =E<gt> $filename
+
+asks C<ssh> to use the key in the given file for authentication.
 
 =item password =E<gt> $password
 
@@ -4678,6 +4684,12 @@ on the array:
   my $sftp = Net::SFTP::Foreign->new($host,
                                       more => [qw(-i /home/foo/.ssh/id_dsa)]);
 
+Note also that latest versions of Net::SFTP::Foreign support the
+C<key_path> argument:
+
+  my $sftp = Net::SFTP::Foreign->new($host,
+                                      key_path => '/home/foo/.ssh/id_dsa');
+
 =item Plink and password authentication
 
 B<Q>: Why password authentication is not supported for the plink SSH
@@ -4685,15 +4697,17 @@ client?
 
 B<A>: A bug in plink breaks it.
 
-As a work around, you can use plink C<-pw> argument to pass the
-password on the command line, but it is B<highly insecure>, anyone
-with a shell account on the local machine would be able to get the
-password. Use at your own risk!:
+Newer versions of Net::SFTP::Foreign pass the password to C<plink>
+using its C<-pw> option. As this feature is not completely secure a
+warning is generated.
 
-  # HIGHLY INSECURE!!!
+It can be silenced (though, don't do it without understanding why it
+is there, please!) as follows:
+
+  no warnings 'Net::SFTP::Foreign';
   my $sftp = Net::SFTP::Foreign->new('foo@bar',
                                      ssh_cmd => 'plink',
-                                     more => [-pw => $password]);
+                                     password => $password);
   $sftp->die_on_error;
 
 =item Plink
@@ -4832,6 +4846,20 @@ This package uses the non-conforming OpenSSH argument order for the
 SSH_FXP_SYMLINK command that seems to be the de facto standard. When
 interacting with SFTP servers that follow the SFTP specification, the
 C<symlink> method will interpret its arguments in reverse order.
+
+=item - Plink fails on Unix:
+
+It seems that an obscure bug in plink that hangs it is triggered by
+Net::SFTP::Foreign. A workaround is to redirect stderr to /dev/null as
+follows:
+
+  $sftp = Net::SFTP::Foreign->new($host,
+                                  ssh_cmd => 'plink',
+                                  stderr_discard => 1);
+
+I have not dedicated too much effort to investigate that bug as I
+don't expect anybody to be using plink on a Unix system... if you need
+it, just let me know!.
 
 =back
 
