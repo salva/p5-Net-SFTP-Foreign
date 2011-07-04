@@ -109,6 +109,8 @@ sub _init_transport {
             my $host = delete $opts->{host};
             defined $host or croak "sftp target host not defined";
 
+            my $key_path = delete $opts->{key_path};
+
             my $ssh_cmd = delete $opts->{ssh_cmd};
             $ssh_cmd = 'ssh' unless defined $ssh_cmd;
             @open2_cmd = ($ssh_cmd);
@@ -128,18 +130,24 @@ sub _init_transport {
                 if (defined $more and !ref($more) and $more =~ /^-\w\s+\S/);
             my @more = _ensure_list $more;
 
+            my @preferred_authentications;
+            if (defined $key_path) {
+                push @preferred_authentications, 'publickey' if defined $key_path;
+                push @open2_cmd, -i => $key_path;
+            }
+
             if ($ssh_cmd_interface eq 'plink') {
-                $pass and !$passphrase
-                    and croak "Password authentication via Expect is not supported for the plink client";
+                if ($pass and !$passphrase) {
+                    push @open2_cmd, -pw => $pass;
+                    undef $pass;
+                }
                 push @open2_cmd, -P => $port if defined $port;
             }
             elsif ($ssh_cmd_interface eq 'ssh') {
                 push @open2_cmd, -p => $port if defined $port;
 		if ($pass and !$passphrase) {
 		    push @open2_cmd, -o => 'NumberOfPasswordPrompts=1';
-                    push @open2_cmd, -o => 'PreferredAuthentications=keyboard-interactive,password'
-                        unless grep { $more[$_] eq '-o' and
-                                      $more[$_ + 1] =~ /^PreferredAuthentications\W/ } 0..$#more-1;
+                    push @preferred_authentications, ('keyboard-interactive', 'password');
 		}
             }
             elsif ($ssh_cmd_interface eq 'tectia') {
@@ -147,6 +155,13 @@ sub _init_transport {
             else {
                 die "Unsupported ssh_cmd_interface '$ssh_cmd_interface'";
             }
+
+            if (@preferred_authentications
+                and not grep { $more[$_] eq '-o' and
+                                   $more[$_ + 1] =~ /^PreferredAuthentications\W/ } 0..$#more-1) {
+                push @open2_cmd, join(',', @preferred_authentications);
+            }
+
             push @open2_cmd, -l => $user if defined $user;
             push @open2_cmd, @more;
             push @open2_cmd, $host;
