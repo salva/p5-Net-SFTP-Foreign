@@ -3697,11 +3697,22 @@ the copied file. Default is to use the umask for the current process.
 sets the permision mask of the file to be $perm, umask and local
 permissions are ignored.
 
+=item overwrite =E<gt> 0
+
+by default C<put> will overwrite any pre-existent file with the same
+name at the remote side. Setting this flag to zero will make the
+method fail in that case.
+
+=item numbered =E<gt> 1
+
+when required, adds a sequence number to local file names in order to
+avoid overwriting pre-existent files. Off by default.
+
 =item append =E<gt> 1
 
 appends the local file at the end of the remote file instead of
 overwriting it. If the remote file does not exist a new one is
-created.
+created. Off by default.
 
 =item resume =E<gt> 1 | 'auto'
 
@@ -4084,8 +4095,8 @@ already exists it is overwritten. On by default.
 
 =item numbered =E<gt> $bool
 
-when required adds a sequence number to local file names in order to
-avoid overwriting already existent files. Off by default.
+when required, adds a sequence number to local file names in order to
+avoid overwriting pre-existent remote files. Off by default.
 
 =item newer_only =E<gt> $bool
 

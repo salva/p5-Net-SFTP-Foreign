@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_01
+        - document overwrite and numbered options as accepted by the
+          put method (reported by Paul Kolano)
+
 1.67  Jul 4, 2011
         - released as stable in order to solve critical bug:
         - solve regresion introduced in 1.63_05 that caused ssh to
