@@ -1,11 +1,21 @@
 package Net::SFTP::Foreign::Common;
 
-our $VERSION = '1.66_01';
+our $VERSION = '1.68_01';
 
 use strict;
 use warnings;
 use Carp;
-use Scalar::Util qw(dualvar tainted);
+
+BEGIN {
+    # Some versions of Scalar::Util are crippled
+    require Scalar::Util;
+    eval { Scalar::Util->import(qw(dualvar tainted)); 1 }
+        or do {
+            *tainted = sub { croak "The version of Scalar::Util installed on your system "
+                                 . "does not provide 'tainted'" };
+            *dualvar = sub { $_[0] };
+        };
+}
 
 use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug _glob_to_regex _is_lnk _is_dir $debug);
 use Net::SFTP::Foreign::Constants qw(:status);

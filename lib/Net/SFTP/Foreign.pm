@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.67';
+our $VERSION = '1.68_01';
 
 use strict;
 use warnings;
@@ -10,7 +10,6 @@ use Carp qw(carp croak);
 
 use Symbol ();
 use Errno ();
-use Scalar::Util;
 
 BEGIN {
     if ($] >= 5.008) {

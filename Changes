@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_01  Jul 12, 2011
+        - add workaround for crippled versions of Scalar::Util
+
 1.67  Jul 4, 2011
         - released as stable in order to solve critical bug:
         - solve regresion introduced in 1.63_05 that caused ssh to
