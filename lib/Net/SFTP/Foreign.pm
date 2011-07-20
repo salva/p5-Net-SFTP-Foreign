@@ -3808,7 +3808,7 @@ directories):
 
 =item wanted =E<gt> qr/.../
 
-Only elements which filename match the regular expression are included
+Only elements whose filename matchs the regular expression are included
 on the listing.
 
 =item wanted =E<gt> sub {...}
