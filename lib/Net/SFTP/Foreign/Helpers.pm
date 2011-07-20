@@ -174,7 +174,6 @@ sub _glob_to_regex {
 		    else {
 			croak "invalid glob pattern";
 		    }
-				
 		}
 		else {
                     $wildcards--;
@@ -228,14 +227,16 @@ sub _catch_tainted_args {
 }
 
 sub _gen_dos2unix {
+    my $unix2dos = shift;
+    my $name = ($unix2dos ? 'unix2dos' : 'dos2unix');
     my $previous;
     my $done;
     sub {
-        $done and die "Internal error: bad calling sequence for unix2dos transformation";
+        $done and die "Internal error: bad calling sequence for $name transformation";
         my $adjustment = 0;
         for (@_) {
             if ($debug and $debug & 128) {
-                _debug ("before dos2unixunix2dos: previous: $previous, data follows...");
+                _debug ("before $name: previous: $previous, data follows...");
                 _hexdump($_);
             }
             if (length) {
@@ -244,7 +245,12 @@ sub _gen_dos2unix {
                     $_ = "\x0d$_";
                 }
                 $adjustment -= $previous = s/\x0d\z//s;
-                $adjustment -= s/\x0d\x0a/\x0a/gs;
+                if ($unix2dos) {
+                    $adjustment += s/(?<!\x0d)\x0a/\x0d\x0a/gs;
+                }
+                else {
+                    $adjustment -= s/\x0d\x0a/\x0a/gs;
+                }
             }
             elsif ($previous) {
                 $previous = 0;
@@ -253,28 +259,13 @@ sub _gen_dos2unix {
                 $_ = "\x0d";
             }
             if ($debug and $debug & 128) {
-                _debug ("after dos2unix: previous: $previous, adjustment: $adjustment, data follows...");
+                _debug ("after $name: previous: $previous, adjustment: $adjustment, data follows...");
                 _hexdump($_);
             }
             return $adjustment;
         }
     }
 }
-
-sub _unix2dos {
-    if ($debug and $debug & 128) {
-        _debug ("before unix2dos: data follows...");
-        _hexdump($_[0]);
-    }
-    my $adjustment = $_[0] =~ s/\x0a/\x0d\x0a/gs;
-    if ($debug and $debug & 128) {
-        _debug ("before unix2dos: adjustment: $adjustment, data follows...");
-        _hexdump($_[0]);
-    }
-    $adjustment;
-}
-
-sub _gen_unix2dos { \&_unix2dos }
 
 sub _gen_converter {
     my $conversion = shift;
@@ -294,10 +285,10 @@ sub _gen_converter {
         }
     }
     elsif ($conversion eq 'dos2unix') {
-        return _gen_dos2unix;
+        return _gen_dos2unix(0);
     }
     elsif ($conversion eq 'unix2dos') {
-        return _gen_unix2dos
+        return _gen_dos2unix(1);
     }
     else {
         croak "unknown conversion '$conversion'";

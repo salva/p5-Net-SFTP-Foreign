@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_02  Jul 20, 2011
+        - make unix2dos clever so it doesn't convert CR+LF sequences
+          into CR+CR+LF (bug report by Pavel Albertyan).
+
 1.68_01  Jul 12, 2011
         - add workaround for crippled versions of Scalar::Util
         - document overwrite and numbered options as accepted by the

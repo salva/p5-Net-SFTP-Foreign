@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.68_01';
+our $VERSION = '1.68_02';
 
 use strict;
 use warnings;
@@ -4620,16 +4620,16 @@ values:
 
 =item conversion =E<gt> 'dos2unix'
 
-Converts LF+CR line endings (as commonly used under MS-DOS) to LF
+Converts CR+LF line endings (as commonly used under MS-DOS) to LF
 (Unix).
 
 =item conversion =E<gt> 'unix2dos'
 
-Converts LF line endings (Unix) to LF+CR (DOS).
+Converts LF line endings (Unix) to CR+LF (DOS).
 
 =item conversion =E<gt> sub { CONVERT $_[0] }
 
-When a callback is given, it is called repeatly as chunks of data
+When a callback is given, it is invoked repeatly as chunks of data
 become available. It has to change C<$_[0]> in place in order to
 perform the conversion.
 

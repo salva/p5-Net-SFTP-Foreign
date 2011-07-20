@@ -21,7 +21,7 @@ plan skip_all => "tests not supported on inferior OS"
 plan skip_all => "sftp-server not found"
     unless defined $sscmd;
 
-plan tests => 211;
+plan tests => 223;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
@@ -64,6 +64,12 @@ for my $bs (7, 8, 9, 20, 1024, 4096) {
     diag ($sftp->error) if $sftp->error;
 
     ok(!filediff('data.txd', 'copied.txd'), "get conversion unix2dos ok - $bs");
+    unlink 'copied.txd';
+
+    ok($sftp->get('data.txd', 'copied.txd', conversion => 'unix2dos'), "get unix2dos when already in dos format - $bs");
+    diag ($sftp->error) if $sftp->error;
+
+    ok(!filediff('data.txd', 'copied.txd'), "get conversion unix2dos when already is dos format ok - $bs");
     unlink 'copied.txd';
 
     ok($sftp->get('data.txd', 'copied.txu', conversion => 'dos2unix'), "get dos2unix - $bs");
