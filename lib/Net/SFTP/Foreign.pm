@@ -1515,13 +1515,18 @@ sub get {
 	    else {
 		my $lumask = ~$perm & 0666;
 		umask $lumask;
-		unlink $local unless $append;
-		unless (CORE::open $fh, ($append ? '>>' : '>'), $local) {
-		    umask $oldumask;
-		    $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
-                                  "Can't open $local", $!);
-		    return undef;
-		}
+                if ($numbered) {
+                }
+                else {
+                    unlink $local unless $append;
+                    unless (CORE::open $fh, ($append ? '>>' : '>'), $local) {
+                        umask $oldumask;
+                        $sftp->_close_save_status($rfh);
+                        $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
+                                          "Can't open $local", $!);
+                        return undef;
+                    }
+                }
 		umask $oldumask;
 		binmode $fh;
 		$lstart = CORE::tell $fh if $append;
@@ -3080,6 +3085,7 @@ sub DESTROY {
     $debug and $debug & 4 and Net::SFTP::Foreign::_debug("$self->DESTROY called (sftp: ".($sftp||'').")");
 
     if ($self->_check and $sftp) {
+        local $sftp->{_autodie};
 	$sftp->_close_save_status($self)
     }
 }
@@ -3120,6 +3126,7 @@ sub DESTROY {
     $debug and $debug & 4 and Net::SFTP::Foreign::_debug("$self->DESTROY called (sftp: ".($sftp||'').")");
 
     if ($self->_check and $sftp) {
+        local $sftp->{_autodie};
 	$sftp->_closedir_save_status($self)
     }
 }
