@@ -1961,28 +1961,28 @@ sub put {
         }
     }
 
-    do { local $sftp->{autodie};
-
-    # In some SFTP server implementations, open does not set the
-    # attributes for existent files so we do it again. The
-    # $late_set_perm work around is for some servers that do not
-    # support changing the permissions of open files
-    if (defined $perm and !$late_set_perm) {
-        $sftp->fsetstat($rfh, $attrs) or goto CLEANUP;
-    }
-
-    my $rfid = $sftp->_rfid($rfh);
-    defined $rfid or die "internal error: rfid is undef";
-
-    # In append mode we add the size of the remote file in writeoff,
-    # if lsize is undef, we initialize it to $writeoff:
-    $lsize += $writeoff if ($append or not defined $lsize);
-
-    # when a converter is used, the EOF can become delayed by the
-    # buffering introduced, we use $eof_t to account for that.
-    my ($eof, $eof_t);
-    my @msgid;
     do {
+        local $sftp->{autodie};
+
+        # In some SFTP server implementations, open does not set the
+        # attributes for existent files so we do it again. The
+        # $late_set_perm work around is for some servers that do not
+        # support changing the permissions of open files
+        if (defined $perm and !$late_set_perm) {
+            $sftp->fsetstat($rfh, $attrs) or goto CLEANUP;
+        }
+
+        my $rfid = $sftp->_rfid($rfh);
+        defined $rfid or die "internal error: rfid is undef";
+
+        # In append mode we add the size of the remote file in
+        # writeoff, if lsize is undef, we initialize it to $writeoff:
+        $lsize += $writeoff if ($append or not defined $lsize);
+
+        # when a converter is used, the EOF can become delayed by the
+        # buffering introduced, we use $eof_t to account for that.
+        my ($eof, $eof_t);
+        my @msgid;
     OK: while (1) {
             if (!$eof and @msgid < $queue_size) {
                 my ($data, $len);
@@ -2078,32 +2078,31 @@ sub put {
         $sftp->_get_msg for (@msgid);
 
         $sftp->_close_save_status($rfh);
+
+        goto CLEANUP if $sftp->{_error};
+
+        # for servers that does not support setting permissions on open files
+        if (defined $perm and $late_set_perm) {
+            $sftp->setstat($remote, $attrs);
+        }
+
+        if ($copy_time) {
+            $attrs = Net::SFTP::Foreign::Attributes->new;
+            $attrs->set_amtime($latime, $lmtime);
+            $sftp->setstat($remote, $attrs) or goto CLEANUP;
+        }
+
+        if ($atomic) {
+            $sftp->rename($remote, $atomic_remote,
+                          overwrite => $overwrite,
+                          numbered => $atomic_numbered) or goto CLEANUP;
+        }
+
+    CLEANUP:
+        if ($cleanup and $sftp->{_error}) {
+            $sftp->_remove_save_status($remote);
+        }
     };
-
-    goto CLEANUP if $sftp->{_error};
-
-    # for servers that does not support setting permissions on open files
-         if (defined $perm and $late_set_perm) {
-        $sftp->setstat($remote, $attrs);
-    }
-
-    if ($copy_time) {
-	$attrs = Net::SFTP::Foreign::Attributes->new;
-	$attrs->set_amtime($latime, $lmtime);
-	$sftp->setstat($remote, $attrs) or goto CLEANUP;
-    }
-
-    if ($atomic) {
-        $sftp->rename($remote, $atomic_remote,
-                      overwrite => $overwrite,
-                      numbered => $atomic_numbered) or goto CLEANUP;
-    }
-
-     CLEANUP:
-         if ($cleanup and $sftp->{_error}) {
-             $sftp->_remove_save_status($remote);
-         }
-     };
     $sftp->_ok_or_autodie;
 }
 
