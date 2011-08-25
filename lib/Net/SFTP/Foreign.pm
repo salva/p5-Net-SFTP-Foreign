@@ -1389,6 +1389,8 @@ sub get {
     my $dont_save = delete $opts{dont_save};
     my $conversion = delete $opts{conversion};
     my $numbered = delete $opts{numbered};
+    my $cleanup = delete $opts{cleanup};
+    my $atomic = delete $opts{atomic};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1398,7 +1400,8 @@ sub get {
 	if ($resume and $append);
     croak "'numbered' can not be used with 'overwrite', 'resume' or 'append'"
 	if ($numbered and ($overwrite or $resume or $append));
-
+    croak "'atomic' can not be used with 'resume' or 'append'"
+        if ($atomic and ($resume or $append));
     if ($local_is_fh) {
 	my $append = 'option can not be used when target is a file handle';
 	$resume and croak "'resume' $append";
@@ -1427,6 +1430,7 @@ sub get {
     $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
+    $cleanup = ($atomic || $numbered) unless defined $cleanup;
 
     my $size;
     my $a = $sftp->stat($remote);
@@ -1456,16 +1460,11 @@ sub get {
         defined $rfh or return undef;
     }
     else {
-        unless ($local_is_fh or $overwrite or $append or $resume) {
-	    while (-e $local) {
-		if ($numbered) {
-                    _inc_numbered($local);
-		}
-		else {
-		    $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
-				      "local file $local already exists");
-		    return undef
-		}
+        unless ($local_is_fh or $overwrite or $append or $resume or $numbered) {
+	    if (-e $local) {
+                $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+                                  "local file $local already exists");
+                return undef
 	    }
         }
 
@@ -1480,7 +1479,7 @@ sub get {
 	    unless (defined $perm or $local_is_fh);
 
         if ($resume) {
-            if (CORE::open $fh, '>', $local) {
+            if (CORE::open $fh, '+<', $local) {
                 binmode $fh;
 		CORE::seek($fh, 0, 2);
                 $askoff = CORE::tell $fh;
@@ -1755,7 +1754,7 @@ sub put {
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
     $late_set_perm = $sftp->{_late_set_perm} unless defined $late_set_perm;
-    $cleanup = $atomic unless defined $cleanup;
+    $cleanup = ($atomic || $numbered) unless defined $cleanup;
 
     my $neg_umask;
     if (defined $perm) {
