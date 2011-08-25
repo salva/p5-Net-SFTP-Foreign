@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.68_02';
+our $VERSION = '1.68_03';
 
 use strict;
 use warnings;
@@ -10,6 +10,7 @@ use Carp qw(carp croak);
 
 use Symbol ();
 use Errno ();
+use Fcntl;
 
 BEGIN {
     if ($] >= 5.008) {
@@ -1408,6 +1409,7 @@ sub get {
 	$overwrite and croak "'overwrite' $append";
 	$numbered and croak "'numbered' $append";
 	$dont_save and croak "'dont_save' $append";
+        $atomic and croak "'croak' $append";
     }
     %opts and _croak_bad_options(keys %opts);
 
@@ -1451,6 +1453,8 @@ sub get {
         }
     }
 
+    my ($atomic_numbered, $atomic_local);
+
     my ($rfh, $fh);
     my $askoff = 0;
     my $lstart = 0;
@@ -1466,6 +1470,14 @@ sub get {
                                   "local file $local already exists");
                 return undef
 	    }
+        }
+
+        if ($atomic) {
+            $atomic_local = $local;
+            $local .= sprintf("(%d).tmp", rand(10000));
+            $atomic_numbered = $numbered;
+            $numbered = 1;
+            $debug and $debug & 128 and _debug("temporal local file name: $local");
         }
 
         if ($copy_perm) {
@@ -1513,23 +1525,29 @@ sub get {
 		$lstart = 0 unless ($lstart and $lstart > 0);
 	    }
 	    else {
-		my $lumask = ~$perm & 0666;
-		umask $lumask;
-                if ($numbered) {
-                }
-                else {
-                    unlink $local unless $append;
-                    unless (CORE::open $fh, ($append ? '>>' : '>'), $local) {
-                        umask $oldumask;
-                        $sftp->_close_save_status($rfh);
+                my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
+                $flags |= Fcntl::O_APPEND if $append;
+                $flags |= Fcntl::O_EXCL if ($numbered or (!$overwrite and !$append));
+
+                my $lumask = ~$perm & 0777;
+
+                unlink $local if ($overwrite and !$numbered);
+
+                while (1) {
+                    umask $lumask;
+                    sysopen ($fh, $local, $flags, $perm) and last;
+                    my $err = $!;
+                    umask $oldumask;
+                    unless ($numbered and -e $local) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
-                                          "Can't open $local", $!);
+                                          "Can't open $local", $err);
                         return undef;
                     }
+                    _inc_numbered($local);
                 }
-		umask $oldumask;
+                umask $oldumask;
 		binmode $fh;
-		$lstart = CORE::tell $fh if $append;
+		$lstart = sysseek($fh, 0, 1) if $append;
 	    }
 	}
 
@@ -1537,8 +1555,10 @@ sub get {
 	    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
 	    my $e = eval { chmod($perm & $neg_umask, $local) };
 	    if ($@ or $e <= 0) {
+                my $err = $!;
+                unlink $local;
 		$sftp->_set_error(SFTP_ERR_LOCAL_CHMOD_FAILED,
-				  "Can't chmod $local", ($@ ? $@ : $!));
+				  "Can't chmod $local", ($@ ? $@ : $err));
 		return undef
 	    }
 	}
@@ -1547,7 +1567,7 @@ sub get {
     my $converter = _gen_converter $conversion;
 
     my $rfid = $sftp->_rfid($rfh);
-    defined $rfid or return undef;
+    defined $rfid or die "internal error: rfid not defined";
 
     my @msgid;
     my @askoff;
@@ -1622,78 +1642,106 @@ sub get {
                 }
             }
         }
-    };
 
-    $sftp->_get_msg for (@msgid);
+        $sftp->_get_msg for (@msgid);
 
-    if ($sftp->error) {
-        # we are out of the pipeline loop, so we can now safely
-        # rethrow any error when autodie is on.
-        croak $sftp->error if $sftp->{_autodie};
-        return undef
-    }
+        goto CLEANUP if $sftp->{_error};
 
-    # if a converter is in place, and aditional call has to be
-    # performed in order to flush any pending buffered data
-    if ($converter) {
-        my $data = '';
-        my $adjustment_before = $adjustment;
-        $adjustment += $converter->($data);
+        # if a converter is in place, and aditional call has to be
+        # performed in order to flush any pending buffered data
+        if ($converter) {
+            my $data = '';
+            my $adjustment_before = $adjustment;
+            $adjustment += $converter->($data);
 
-        if (length($data) and defined $cb) {
-	    # $size = $loff if ($loff > $size and $size != -1);
-	    $cb->($sftp, $data, $askoff + $adjustment_before, $size + $adjustment);
-            return undef if $sftp->error;
-	}
-
-        if (length($data) and !$dont_save) {
-            unless (print $fh $data) {
-                $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
-                                  "unable to write data to local file $local", $!);
-                return undef;
+            if (length($data) and defined $cb) {
+                # $size = $loff if ($loff > $size and $size != -1);
+                $cb->($sftp, $data, $askoff + $adjustment_before, $size + $adjustment);
+                goto CLEANUP if $sftp->{_error};
             }
-        }
-    }
 
-    # we call the callback one last time with an empty string;
-    if (defined $cb) {
-        my $data = '';
-        $cb->($sftp, $data, $askoff + $adjustment, $size + $adjustment);
-        return undef if $sftp->error;
-        if (length($data) and !$dont_save) {
-            unless (print $fh $data) {
-                $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
-                                  "unable to write data to local file $local", $!);
-                return undef;
-            }
-        }
-    }
-
-    unless ($dont_save) {
-	unless ($local_is_fh or CORE::close $fh) {
-	    $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
-			      "unable to write data to local file $local", $!);
-	    return undef;
-        }
-
-        # we can be running on taint mode, so some checks are
-        # performed to untaint data from the remote side.
-
-        if ($copy_time) {
-            if ($a->flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
-                $a->atime =~ /^(\d+)$/ or die "Bad atime from remote file $remote";
-                my $atime = int $1;
-                $a->mtime =~ /^(\d+)$/ or die "Bad mtime from remote file $remote";
-                my $mtime = int $1;
-
-                unless (utime $atime, $mtime, $local) {
-                    $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
-                                      "Can't utime $local", $!);
-                    return undef;
+            if (length($data) and !$dont_save) {
+                unless (print $fh $data) {
+                    $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
+                                      "unable to write data to local file $local", $!);
+                    goto CLEANUP;
                 }
             }
         }
-    }
+
+        # we call the callback one last time with an empty string;
+        if (defined $cb) {
+            my $data = '';
+            $cb->($sftp, $data, $askoff + $adjustment, $size + $adjustment);
+            return undef if $sftp->error;
+            if (length($data) and !$dont_save) {
+                unless (print $fh $data) {
+                    $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
+                                      "unable to write data to local file $local", $!);
+                    goto CLEANUP;
+                }
+            }
+        }
+
+        unless ($dont_save) {
+            unless ($local_is_fh or CORE::close $fh) {
+                $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
+                                  "unable to write data to local file $local", $!);
+                goto CLEANUP;
+            }
+
+            # we can be running on taint mode, so some checks are
+            # performed to untaint data from the remote side.
+
+            if ($copy_time) {
+                if ($a->flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
+                    $a->atime =~ /^(\d+)$/ or die "Bad atime from remote file $remote";
+                    my $atime = int $1;
+                    $a->mtime =~ /^(\d+)$/ or die "Bad mtime from remote file $remote";
+                    my $mtime = int $1;
+
+                    unless (utime $atime, $mtime, $local) {
+                        $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
+                                          "Can't utime $local", $!);
+                        goto CLEANUP;
+                    }
+                }
+            }
+        }
+
+        if ($atomic) {
+            my $lock;
+            if (!$overwrite) {
+                while (1) {
+                    last if sysopen $lock, $atomic_local, Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY;
+                    my $err = $!;
+                    unless (-e $atomic_local) {
+                        $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
+                                          "Can't open $local", $err);
+                        goto CLEANUP;
+                    }
+                    if ($numbered) {
+                        _inc_numbered($atomic_local);
+                    }
+                    else {
+                        $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+                                          "local file $atomic_local already exists");
+                        goto CLEANUP;
+                    }
+                }
+            }
+            CORE::rename $local, $atomic_local or
+                    $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
+                                      "Unable to rename temporal file to its final position '$atomic_local'");
+            goto CLEANUP;
+        }
+
+    CLEANUP:
+        if ($cleanup and $sftp->{_error}) {
+            unlink $local;
+        }
+
+    }; # autodie flag is restored here!
 
     $sftp->_ok_or_autodie;
 }
@@ -1940,7 +1988,7 @@ sub put {
             $remote .= sprintf("(%d).tmp", rand(10000));
             $atomic_numbered = $numbered;
             $numbered = 1;
-            $debug and $debug & 128 and _debug("temporal remote name: $remote");
+            $debug and $debug & 128 and _debug("temporal remote file name: $remote");
         }
 	if ($numbered) {
             while (1) {

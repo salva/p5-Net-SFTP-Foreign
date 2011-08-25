@@ -118,6 +118,7 @@ BEGIN {
                       SFTP_ERR_REMOTE_FSTATVFS_FAILED => 49,
 		      SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED => 50,
                       SFTP_ERR_REMOTE_HARDLINK_FAILED => 51,
+		      SFTP_ERR_LOCAL_RENAME_FAILED => 52,
                     );
 
     for my $key (keys %constants) {
