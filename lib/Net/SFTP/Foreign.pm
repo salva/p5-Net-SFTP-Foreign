@@ -1243,6 +1243,9 @@ sub rename {
     my ($sftp, $old, $new, %opts) = @_;
 
     my $overwrite = delete $opts{overwrite};
+    my $numbered = delete $opts{numbered};
+    croak "'overwrite' and 'numbered' options can not be used together"
+        if ($overwrite and $numbered);
     %opts and _croak_bad_options(keys %opts);
 
     if ($overwrite) {
@@ -1250,22 +1253,30 @@ sub rename {
         $sftp->status != SSH2_FX_OP_UNSUPPORTED and return undef;
     }
 
-    # we are optimistic here and try to rename it without testing if a
-    # file of the same name already exists first
-    $sftp->_rename($old, $new) and return 1;
-
-    if ($overwrite and $sftp->status == SSH2_FX_FAILURE) {
-        if ($sftp->realpath($old) eq $sftp->realpath($new)) {
-            $sftp->_set_status(SSH2_FX_FAILURE);
-            $sftp->_set_error(SFTP_ERR_REMOTE_RENAME_FAILED,
-                             "Couldn't rename, both '$old' and '$new' point to the same file");
-            return undef;
+    for (1) {
+        local $sftp->{_autodie};
+        # we are optimistic here and try to rename it without testing
+        # if a file of the same name already exists first
+        if (!$sftp->_rename($old, $new) and
+            $sftp->status == SSH2_FX_FAILURE) {
+            if ($numbered and $sftp->test_e($new)) {
+                _inc_numbered($new);
+                redo;
+            }
+            elsif ($overwrite) {
+                my $rp_old = $sftp->realpath($old);
+                my $rp_new = $sftp->realpath($new);
+                if (defined $rp_old and defined $rp_new and $rp_old eq $rp_new) {
+                    $sftp->_clear_error;
+                }
+                elsif ($sftp->remove($new)) {
+                    $overwrite = 0;
+                    redo;
+                }
+            }
         }
-
-        $sftp->remove($new);
-        return $sftp->_rename($old, $new);
     }
-    return undef;
+    $sftp->_ok_or_autodie;
 }
 
 sub atomic_rename {
@@ -1332,20 +1343,20 @@ sub _gen_save_status_method {
     my $method = shift;
     sub {
 	my $sftp = shift;
-	my $oerror = $sftp->{_error};
-	my $ostatus = $sftp->{_status};
-	my $ret = $sftp->$method(@_);
-	if ($oerror) {
-	    $sftp->{_error} = $oerror;
-	    $sftp->{_status} = $ostatus;
-	}
-	$ret;
+        local ($sftp->{_error}, $sftp->{_status}) if $sftp->{_error};
+	$sftp->$method(@_);
     }
 }
 
 *_close_save_status = _gen_save_status_method('close');
 *_closedir_save_status = _gen_save_status_method('closedir');
+*_remove_save_status = _gen_save_status_method('remove');
 
+sub _inc_numbered {
+    $_[0] =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e or
+    $_[0] =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+    $debug and $debug & 128 and _debug("numbering to: $_[0]");
+}
 
 ## High-level client -> server methods.
 
@@ -1448,10 +1459,7 @@ sub get {
         unless ($local_is_fh or $overwrite or $append or $resume) {
 	    while (-e $local) {
 		if ($numbered) {
-		    my $old = $local;
-		    $local =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
-			or $local =~ s{((?:\.[^\.]*)?)$}{(1)$1};
-		    $debug and $debug & 128 and _debug("numbering: $old => $local");
+                    _inc_numbered($local);
 		}
 		else {
 		    $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
@@ -1683,7 +1691,7 @@ sub get {
         }
     }
 
-    return !$sftp->{_error}
+    $sftp->_ok_or_autodie;
 }
 
 # return file contents on success, undef on failure
@@ -1725,6 +1733,8 @@ sub put {
     my $conversion = delete $opts{conversion};
     my $late_set_perm = delete $opts{late_set_perm};
     my $numbered = delete $opts{numbered};
+    my $atomic = delete $opts{atomic};
+    my $cleanup = delete $opts{cleanup};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1736,6 +1746,8 @@ sub put {
 	if ($resume and $overwrite);
     croak "'numbered' can not be used with 'overwrite', 'resume' or 'append'"
 	if ($numbered and ($overwrite or $resume or $append));
+    croak "'atomic' can not be used with 'resume' or 'append'"
+        if ($atomic and ($resume or $append));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -1743,6 +1755,7 @@ sub put {
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
     $late_set_perm = $sftp->{_late_set_perm} unless defined $late_set_perm;
+    $cleanup = $atomic unless defined $cleanup;
 
     my $neg_umask;
     if (defined $perm) {
@@ -1906,34 +1919,60 @@ sub put {
         }
     }
 
-    unless (defined $rfh) {
-	if ($numbered) {
-	    while ($sftp->stat($remote)) {
-		my $old = $remote;
-		$remote =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
-		    or $remote =~ s{((?:\.[^\.]*)?)$}{(1)$1};
-		$debug and $debug & 128 and _debug("numbering remote: $old => $local");
-	    }
-	}
+    my ($atomic_numbered, $atomic_remote);
 
-        $rfh = $sftp->open($remote,
-                           SSH2_FXF_WRITE | SSH2_FXF_CREAT |
-                           ($append ? 0 : ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL)),
-                           $attrs)
-            or return undef;
+    unless (defined $rfh) {
+        if ($atomic) {
+            # check that does not exist a file of the same name that
+            # would block the rename operation at the end
+            if (!($numbered or $overwrite) and
+                $sftp->test_e($remote)) {
+                $sftp->_set_status(SSH2_FX_FAILURE);
+                $sftp->_set_error(SFTP_ERR_REMOTE_ALREADY_EXISTS,
+                                  "Remote file '$remote' already exists");
+                return undef;
+            }
+            $atomic_remote = $remote;
+            $remote .= sprintf("(%d).tmp", rand(10000));
+            $atomic_numbered = $numbered;
+            $numbered = 1;
+            $debug and $debug & 128 and _debug("temporal remote name: $remote");
+        }
+	if ($numbered) {
+            while (1) {
+                local $sftp->{_autodie};
+                $rfh = $sftp->open($remote,
+                                   SSH2_FXF_WRITE | SSH2_FXF_CREAT | SSH2_FXF_EXCL,
+                                   $attrs);
+                last if ($rfh or
+                         $sftp->status != SSH2_FX_FAILURE or
+                         !$sftp->test_e($remote));
+                _inc_numbered($remote);
+	    }
+            $sftp->_ok_or_autodie;
+            $$numbered = $remote if ref $numbered;
+	}
+        else {
+            $rfh = $sftp->open($remote,
+                               SSH2_FXF_WRITE | SSH2_FXF_CREAT |
+                               ($append ? 0 : ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL)),
+                               $attrs)
+                or return undef;
+        }
     }
+
+    do { local $sftp->{autodie};
 
     # In some SFTP server implementations, open does not set the
     # attributes for existent files so we do it again. The
     # $late_set_perm work around is for some servers that do not
     # support changing the permissions of open files
     if (defined $perm and !$late_set_perm) {
-        $sftp->fsetstat($rfh, $attrs)
-            or return undef;
+        $sftp->fsetstat($rfh, $attrs) or goto CLEANUP;
     }
 
     my $rfid = $sftp->_rfid($rfh);
-    defined $rfid or return undef;
+    defined $rfid or die "internal error: rfid is undef";
 
     # In append mode we add the size of the remote file in writeoff,
     # if lsize is undef, we initialize it to $writeoff:
@@ -1944,7 +1983,6 @@ sub put {
     my ($eof, $eof_t);
     my @msgid;
     do {
-        local $sftp->{_autodie};
     OK: while (1) {
             if (!$eof and @msgid < $queue_size) {
                 my ($data, $len);
@@ -2042,24 +2080,31 @@ sub put {
         $sftp->_close_save_status($rfh);
     };
 
-    if ($sftp->error) {
-        croak $sftp->error if $sftp->{_autodie};
-        return undef;
-    }
+    goto CLEANUP if $sftp->{_error};
 
     # for servers that does not support setting permissions on open files
-    if (defined $perm and $late_set_perm) {
-        $sftp->setstat($remote, $attrs)
-            or return undef;
+         if (defined $perm and $late_set_perm) {
+        $sftp->setstat($remote, $attrs);
     }
 
     if ($copy_time) {
 	$attrs = Net::SFTP::Foreign::Attributes->new;
 	$attrs->set_amtime($latime, $lmtime);
-	$sftp->setstat($remote, $attrs);
+	$sftp->setstat($remote, $attrs) or goto CLEANUP;
     }
 
-    return $sftp->{_error} == 0;
+    if ($atomic) {
+        $sftp->rename($remote, $atomic_remote,
+                      overwrite => $overwrite,
+                      numbered => $atomic_numbered) or goto CLEANUP;
+    }
+
+     CLEANUP:
+         if ($cleanup and $sftp->{_error}) {
+             $sftp->_remove_save_status($remote);
+         }
+     };
+    $sftp->_ok_or_autodie;
 }
 
 sub ls {
@@ -2275,12 +2320,7 @@ sub get_symlink {
     my $link = $sftp->readlink($remote) or return undef;
 
     if ($numbered) {
-	while (-e $local) {
-	    my $old = $local;
-	    $local =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
-		or $local =~ s{((?:\.[^\.]*)?)$}{(1)$1};
-	    $debug and $debug & 128 and _debug("numbering: $old => $local");
-	}
+        _inc_numbered($local) while -e $local;
     }
     elsif (-e $local) {
 	if ($overwrite) {
@@ -2330,16 +2370,23 @@ sub put_symlink {
 	return undef;
     }
 
-    if ($numbered) {
-	while ($sftp->stat($remote)) {
-	    my $old = $remote;
-	    $remote =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e
-		or $remote =~ s{((?:\.[^\.]*)?)$}{(1)$1};
-	    $debug and $debug & 128 and _debug("numbering remote: $old => $local");
-	}
+    while (1) {
+        local $sftp->{_autodie};
+        $sftp->symlink($remote, $target);
+        if ($sftp->error and
+            $sftp->status == SSH2_FX_FAILURE) {
+            if ($numbered and $sftp->test_e($remote)) {
+                _inc_numbered($remote);
+                redo;
+            }
+            elsif ($overwrite and $sftp->remove($remote)) {
+                $overwrite = 0;
+                redo;
+            }
+        }
+        last
     }
-    $sftp->remove($remote) if $overwrite;
-    $sftp->symlink($remote, $target);
+    $sftp->_ok_or_autodie;
 }
 
 sub rget {

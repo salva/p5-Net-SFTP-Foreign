@@ -95,6 +95,13 @@ sub die_on_error {
     $sftp->{_error} and croak(@_ ? "@_: $sftp->{_error}" : $sftp->{_error});
 }
 
+sub _ok_or_autodie {
+    my $sftp = shift;
+    return 1 unless $sftp->{_error};
+    $sftp->{_autodie} and croak $sftp->{_error};
+    undef;
+}
+
 sub _set_errno {
     my $sftp = shift;
     if ($sftp->{_error}) {
@@ -390,6 +397,12 @@ sub test_d {
     my ($sftp, $name) = @_;
     my $a = $sftp->stat($name);
     $a ? _is_dir($a->perm) : undef;
+}
+
+sub test_e {
+    my ($sftp, $name) = @_;
+    local ($sftp->{_error}, $sftp->{_status}, $sftp->{_autodie});
+    !!$sftp->stat($name)
 }
 
 1;
