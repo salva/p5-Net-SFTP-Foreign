@@ -1546,6 +1546,7 @@ sub get {
                     _inc_numbered($local);
                 }
                 umask $oldumask;
+                $$numbered = $local if ref $numbered;
 		binmode $fh;
 		$lstart = sysseek($fh, 0, 1) if $append;
 	    }
@@ -1756,6 +1757,7 @@ sub get {
                     goto CLEANUP;
                 }
             }
+            $$atomic_numbered = $local if ref $atomic_numbered;
         }
 
     CLEANUP:
@@ -2398,6 +2400,7 @@ sub get_symlink {
 
     my $link = $sftp->readlink($remote) or return undef;
 
+    # TODO: this is too weak, may contain race conditions.
     if ($numbered) {
         _inc_numbered($local) while -e $local;
     }
@@ -2417,6 +2420,8 @@ sub get_symlink {
 			  "creation of symlink '$local' failed", $!);
 	return undef;
     }
+    $$numbered = $local if ref $numbered;
+
     1;
 }
 
@@ -2465,6 +2470,7 @@ sub put_symlink {
         }
         last
     }
+    $$numbered = $remote if ref $numbered;
     $sftp->_ok_or_autodie;
 }
 
@@ -2775,7 +2781,7 @@ sub mget {
 
     my %get_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask copy_perm copy_time block_size queue_size
-                       overwrite conversion resume numbered));
+                       overwrite conversion resume numbered atomic));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -3699,6 +3705,14 @@ For instance:
 will copy the remote file as "data.txt" the first time and as
 "data(1).txt" the second one.
 
+If a scalar reference is passed as the numbered value, the final
+target will be stored in the value pointed by the reference. For
+instance:
+
+  my $target;
+  $sftp->get("data.txt", "data.txt", numbered => \$target);
+  say "file was saved as $target" unless $sftp->error
+
 =item atomic =E<gt> 1
 
 The remote file contents are transferred into a temporal file that
@@ -4279,6 +4293,8 @@ If a directory is discarded all of its contents are also discarded (as
 it is not possible to copy child files without creating the directory
 first!).
 
+=item atomic =E<gt> 1
+
 =item block_size =E<gt> $block_size
 
 =item queue_size =E<gt> $queue_size
@@ -4346,6 +4362,8 @@ copied. See also C<ls> method docs.
 If a directory is discarded all of its contents are also discarded (as
 it is not possible to copy child files without creating the directory
 first!).
+
+=item atomic =E<gt> 1
 
 =item block_size =E<gt> $block_size
 
