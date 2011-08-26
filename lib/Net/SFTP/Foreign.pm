@@ -1453,7 +1453,7 @@ sub get {
         }
     }
 
-    my ($atomic_numbered, $atomic_local);
+    my ($atomic_numbered, $atomic_local, $atomic_cleanup);
 
     my ($rfh, $fh);
     my $askoff = 0;
@@ -1576,9 +1576,12 @@ sub get {
     my $n = 0;
     local $\;
     do {
-        # disable autodie here in order to do not leave unhandled
+        # Disable autodie here in order to do not leave unhandled
         # responses queued on the connection in case of failure.
         local $sftp->{_autodie};
+
+        # Again, once this point is reached, all code paths should end
+        # through the CLEANUP block.
 
         while (1) {
             # request a new block if queue is not full
@@ -1710,35 +1713,55 @@ sub get {
         }
 
         if ($atomic) {
-            my $lock;
             if (!$overwrite) {
                 while (1) {
-                    last if sysopen $lock, $atomic_local, Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY;
+                    # performing a non-overwriting atomic rename is
+                    # quite burdensome: first, link is tried, if that
+                    # fails, non-overwriting is favoured over
+                    # atomicity and an empty file is used to lock the
+                    # path before atempting an overwriting rename.
+                    if (link $local, $atomic_local) {
+                        unlink $local;
+                        last;
+                    }
                     my $err = $!;
                     unless (-e $atomic_local) {
-                        $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
-                                          "Can't open $local", $err);
-                        goto CLEANUP;
+                        if (sysopen my $lock, $atomic_local,
+                            Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY,
+                            0600) {
+                            $atomic_cleanup = 1;
+                            goto OVERWRITE;
+                        }
+                        $err = $!;
+                        unless (-e $atomic_local) {
+                            $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
+                                              "Can't open $local", $err);
+                            goto CLEANUP;
+                        }
                     }
-                    if ($numbered) {
-                        _inc_numbered($atomic_local);
-                    }
-                    else {
+                    unless ($numbered) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
                                           "local file $atomic_local already exists");
                         goto CLEANUP;
                     }
+                    _inc_numbered($atomic_local);
                 }
             }
-            CORE::rename $local, $atomic_local or
+            else {
+            OVERWRITE:
+                unless (CORE::rename $local, $atomic_local) {
                     $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
-                                      "Unable to rename temporal file to its final position '$atomic_local'");
-            goto CLEANUP;
+                                      "Unable to rename temporal file to its final position '$atomic_local'", $!);
+
+                    goto CLEANUP;
+                }
+            }
         }
 
     CLEANUP:
         if ($cleanup and $sftp->{_error}) {
             unlink $local;
+            unlink $atomic_local if $atomic_cleanup;
         }
 
     }; # autodie flag is restored here!
@@ -1758,7 +1781,7 @@ sub get_content {
     my $rfh = $sftp->open($name)
 	or return undef;
 
-    return scalar $sftp->readline($rfh, undef);
+    scalar $sftp->readline($rfh, undef);
 }
 
 sub put {
@@ -2013,6 +2036,10 @@ sub put {
         }
     }
 
+    $sftp->_ok_or_autodie or return undef;
+    # Once this point is reached and for the remaining of the sub,
+    # code should never return but jump into the CLEANUP block.
+
     do {
         local $sftp->{autodie};
 
@@ -2152,6 +2179,7 @@ sub put {
 
     CLEANUP:
         if ($cleanup and $sftp->{_error}) {
+            warn "cleanup $remote";
             $sftp->_remove_save_status($remote);
         }
     };
@@ -2430,7 +2458,7 @@ sub put_symlink {
                 _inc_numbered($remote);
                 redo;
             }
-            elsif ($overwrite and $sftp->remove($remote)) {
+            elsif ($overwrite and $sftp->_remove_save_status($remote)) {
                 $overwrite = 0;
                 redo;
             }
@@ -2590,19 +2618,18 @@ sub rput {
     my $umask = delete $opts{umask};
     my $copy_perm = delete $opts{exists $opts{copy_perm} ? 'copy_perm' : 'copy_perms'};
     my $copy_time = delete $opts{copy_time};
-    my $block_size = delete $opts{block_size};
-    my $queue_size = delete $opts{queue_size};
-    my $overwrite = delete $opts{overwrite};
-    my $numbered = delete $opts{numbered};
+
+    my %put_opts = (map { $_ => delete $opts{$_} }
+		    qw(block_size queue_size overwrite conversion
+                       resume numbered late_set_perm atomic));
+
+    my %put_symlink_opts = map { $_ => $put_opts{$_} } qw(overwrite numbered);
+
+
     my $newer_only = delete $opts{newer_only};
     my $on_error = delete $opts{on_error};
     local $sftp->{_autodie} if $on_error;
     my $ignore_links = delete $opts{ignore_links};
-    my $conversion = delete $opts{conversion};
-    my $resume = delete $opts{resume};
-    my $late_set_perm = delete $opts{late_set_perm};
-
-    # my $relative_links = delete $opts{relative_links};
 
     my $wanted = _gen_wanted( delete $opts{wanted},
 			      delete $opts{no_wanted} );
@@ -2685,9 +2712,10 @@ sub rput {
 				my (undef, $d, $f) = File::Spec->splitpath($1);
 				my $rpath = $sftp->join($remote, File::Spec->splitdir($d), $f);
 				if (_is_lnk($e->{a}->perm) and !$ignore_links) {
-				    if ($sftp->put_symlink($fn, $remote,
-							   overwrite => $overwrite,
-							   numbered => $numbered)) {
+				    if ($sftp->put_symlink($fn, $rpath,
+							   # overwrite => $overwrite,
+							   # numbered => $numbered
+                                                           %put_symlink_opts)) {
 					$count++;
 					return undef;
 				    }
@@ -2703,15 +2731,16 @@ sub rput {
 				    }
 				    else {
 					if ($sftp->put($fn, $rpath,
-						       overwrite => $overwrite,
-						       numbered => $numbered,
-						       queue_size => $queue_size,
-						       block_size => $block_size,
+						       # overwrite => $overwrite,
+						       # numbered => $numbered,
+						       # queue_size => $queue_size,
+						       # block_size => $block_size,
 						       perm => ($copy_perm ? $e->{a}->perm : 0777) & $mask,
 						       copy_time => $copy_time,
-                                                       conversion => $conversion,
-                                                       resume => $resume,
-                                                       late_set_perm => $late_set_perm )) {
+                                                       # conversion => $conversion,
+                                                       # resume => $resume,
+                                                       # late_set_perm => $late_set_perm
+                                                       %put_opts)) {
 					    $count++;
 					    return undef;
 					}
@@ -2815,7 +2844,7 @@ sub mput {
 
     my %put_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask copy_perm copy_time block_size queue_size
-                       overwrite conversion resume numbered late_set_perm));
+                       overwrite conversion resume numbered late_set_perm atomic));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -3684,6 +3713,15 @@ For instance:
 will copy the remote file as "data.txt" the first time and as
 "data(1).txt" the second one.
 
+=item atomic =E<gt> 1
+
+The remote file contents are transferred into a temporal file that
+once the copy completes is renamed to the target destination.
+
+If not-overwrite of remote files is also requested, an empty file may
+appear at the target destination before the rename operation is
+performed. This is due to limitations of some operating/file systems.
+
 =item conversion =E<gt> $conversion
 
 on the fly data conversion of the file contents can be performed with
@@ -3819,6 +3857,20 @@ resumes an interrupted transfer.
 
 If the C<auto> value is given, the transfer will be resumed only when
 the remote file is newer than the local one.
+
+=item atomic =E<gt> 1
+
+The local file contents are transferred into a temporal file that
+once the copy completes is renamed to the target destination.
+
+This operation relies on the SSH server to perform an
+overwriting/non-overwritting atomic rename operation free of race
+conditions.
+
+OpenSSH server does it correctly on top of Linux/UNIX native file
+systems (i.e. ext[234], ffs or zfs) but has problems on file systems
+not supporting hard links (i.e. FAT) or on operating systems with
+broken POSIX semantics as Windows.
 
 =item conversion =E<gt> $conversion
 
