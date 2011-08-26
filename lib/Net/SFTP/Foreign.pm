@@ -2478,26 +2478,27 @@ sub rget {
     my $umask = delete $opts{umask};
     my $copy_perm = delete $opts{exists $opts{copy_perm} ? 'copy_perm' : 'copy_perms'};
     my $copy_time = delete $opts{copy_time};
-    my $block_size = delete $opts{block_size};
-    my $queue_size = delete $opts{queue_size};
-    my $overwrite = delete $opts{overwrite};
     my $newer_only = delete $opts{newer_only};
     my $on_error = delete $opts{on_error};
     local $sftp->{_autodie} if $on_error;
     my $ignore_links = delete $opts{ignore_links};
-    my $conversion = delete $opts{conversion};
-    my $resume = delete $opts{resume};
-    my $numbered = delete $opts{numbered};
-
-    if ($resume and $conversion) {
-        carp "resume option is useless when data conversion has also been requested";
-        undef $resume;
-    }
 
     # my $relative_links = delete $opts{relative_links};
 
     my $wanted = _gen_wanted( delete $opts{wanted},
 			      delete $opts{no_wanted} );
+
+    my %get_opts = (map { $_ => delete $opts{$_} }
+                    qw(block_size queue_size overwrite conversion
+                       resume numbered atomic));
+
+    if ($get_opts{resume} and $get_opts{conversion}) {
+        carp "resume option is useless when data conversion has also been requested";
+        delete $get_opts{resume};
+    }
+
+    my %get_symlink_opts = (map { $_ => $get_opts{$_} }
+                            qw(overwrite numbered));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -2558,9 +2559,8 @@ sub rget {
                                  ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
 				 if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				     if ($sftp->get_symlink($fn, $lpath,
-							    overwrite => $overwrite,
-							    numbered => $numbered,
-							    copy_time => $copy_time)) {
+							    copy_time => $copy_time,
+                                                            %get_symlink_opts)) {
 					 $count++;
 					 return undef;
 				     }
@@ -2573,14 +2573,9 @@ sub rget {
 				     }
 				     else {
 					 if ($sftp->get($fn, $lpath,
-							overwrite => $overwrite,
-							numbered => $numbered,
-							queue_size => $queue_size,
-							block_size => $block_size,
 							copy_perm => $copy_perm,
 							copy_time => $copy_time,
-                                                        conversion => $conversion,
-                                                        resume => $resume )) {
+                                                        %get_opts)) {
 					     $count++;
 					     return undef;
 					 }
@@ -2619,13 +2614,6 @@ sub rput {
     my $copy_perm = delete $opts{exists $opts{copy_perm} ? 'copy_perm' : 'copy_perms'};
     my $copy_time = delete $opts{copy_time};
 
-    my %put_opts = (map { $_ => delete $opts{$_} }
-		    qw(block_size queue_size overwrite conversion
-                       resume numbered late_set_perm atomic));
-
-    my %put_symlink_opts = map { $_ => $put_opts{$_} } qw(overwrite numbered);
-
-
     my $newer_only = delete $opts{newer_only};
     my $on_error = delete $opts{on_error};
     local $sftp->{_autodie} if $on_error;
@@ -2633,6 +2621,13 @@ sub rput {
 
     my $wanted = _gen_wanted( delete $opts{wanted},
 			      delete $opts{no_wanted} );
+
+    my %put_opts = (map { $_ => delete $opts{$_} }
+		    qw(block_size queue_size overwrite conversion
+                       resume numbered late_set_perm atomic));
+
+    my %put_symlink_opts = (map { $_ => $put_opts{$_} }
+                            qw(overwrite numbered));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -2713,8 +2708,6 @@ sub rput {
 				my $rpath = $sftp->join($remote, File::Spec->splitdir($d), $f);
 				if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				    if ($sftp->put_symlink($fn, $rpath,
-							   # overwrite => $overwrite,
-							   # numbered => $numbered
                                                            %put_symlink_opts)) {
 					$count++;
 					return undef;
@@ -2731,15 +2724,8 @@ sub rput {
 				    }
 				    else {
 					if ($sftp->put($fn, $rpath,
-						       # overwrite => $overwrite,
-						       # numbered => $numbered,
-						       # queue_size => $queue_size,
-						       # block_size => $block_size,
 						       perm => ($copy_perm ? $e->{a}->perm : 0777) & $mask,
 						       copy_time => $copy_time,
-                                                       # conversion => $conversion,
-                                                       # resume => $resume,
-                                                       # late_set_perm => $late_set_perm
                                                        %put_opts)) {
 					    $count++;
 					    return undef;
@@ -3722,6 +3708,14 @@ If not-overwrite of remote files is also requested, an empty file may
 appear at the target destination before the rename operation is
 performed. This is due to limitations of some operating/file systems.
 
+=item cleanup =E<gt> 1
+
+If the transfer fails, remove the incomplete file.
+
+This option is set to by default when there is not possible to resume
+the transfer afterwards (i.e., when using `atomic` or `numbered`
+options).
+
 =item conversion =E<gt> $conversion
 
 on the fly data conversion of the file contents can be performed with
@@ -3871,6 +3865,17 @@ OpenSSH server does it correctly on top of Linux/UNIX native file
 systems (i.e. ext[234], ffs or zfs) but has problems on file systems
 not supporting hard links (i.e. FAT) or on operating systems with
 broken POSIX semantics as Windows.
+
+=item cleanup =E<gt> 1
+
+If the transfer fails, attempts to remove the incomplete file.
+
+Cleanup may fail if for example the SSH connection gets broken.
+
+This option is set to by default when there is not possible to resume
+the transfer afterwards (i.e., when using `atomic` or `numbered`
+options).
+
 
 =item conversion =E<gt> $conversion
 
