@@ -11,6 +11,7 @@ Revision history for Net::SFTP::Foreign
           get_symlink options using hashes
         - remove operation inside put_symlink was clobbering error and
           status from previous symlink call
+        - solve several minor bugs related to autodie handling
         - do not die from inside DESTROY methods when autodie is set
         - resume feature in get method was broken
         - refactor numbered logic inside _inc_numbered sub
