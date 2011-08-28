@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.68_03
+1.68_03  Aug 28, 2011
         - atomic feature added to get, put and higher level methods
           using them
         - cleanup feature added to get and put
