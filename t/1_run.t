@@ -21,7 +21,7 @@ plan skip_all => "tests not supported on inferior OS"
 plan skip_all => "sftp-server not found"
     unless defined $sscmd;
 
-plan tests => 742;
+plan tests => 790;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
@@ -118,6 +118,13 @@ for my $setcwd (0, 1) {
         ok ($sftp->get($drfn, $dlfn1), "get - $i");
         diag ($sftp->error) if $sftp->error;
         ok(!filediff($drfn_l, $dlfn1), "get - file content - $i");
+        unlink $dlfn1;
+
+        my $c = 0;
+        ok ($sftp->get($drfn, $dlfn1, conversion => sub { $c = 1 } ), "get with conversion - $i");
+        diag ($sftp->error) if $sftp->error;
+        ok(!filediff($drfn_l, $dlfn1), "get with conversion - file content - $i");
+        ok($c, "get with conversion - conversion done - $i");
         unlink $dlfn1;
 
 	ok (open(F, '>', $dlfn1), "get fh - open - $i");
