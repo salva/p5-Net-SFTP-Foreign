@@ -1,5 +1,13 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_04  Sep 7, 2011
+        - accept passing undef as second argument to put, get, rput,
+          rget, mput and mget
+        - catch invalid undefined arguments in several places
+        - custom conversion usage was broken
+        - add %DEFAULTS to Compat package for setting default options
+          for Net::SFTP::Foreign methods called under the hood.
+
 1.68_03  Aug 28, 2011
         - atomic feature added to get, put and higher level methods
           using them
