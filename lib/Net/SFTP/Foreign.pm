@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.68_03';
+our $VERSION = '1.68_04';
 
 use strict;
 use warnings;
@@ -32,8 +32,10 @@ BEGIN {
 our $debug;
 BEGIN { *Net::SFTP::Foreign::Helpers::debug = \$debug };
 use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
-                                   _sort_entries _gen_wanted _gen_converter
-                                   _hexdump _ensure_list _catch_tainted_args);
+                                   _sort_entries _gen_wanted
+                                   _gen_converter _hexdump
+                                   _ensure_list _catch_tainted_args
+                                   _file_part);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -1368,14 +1370,17 @@ sub abort {
 
 # returns true on success, undef on failure
 sub get {
-    @_ >= 3 or croak 'Usage: $sftp->get($remote, $local, %opts)';
+    @_ >= 2 or croak 'Usage: $sftp->get($remote, $local, %opts)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $remote, $local, %opts) = @_;
-    $remote = $sftp->_rel2abs($remote);
-    my $local_is_fh = (ref $local and $local->isa('GLOB'));
+    defined $remote or croak "remote file path is undefined";
 
     $sftp->_clear_error_and_status;
+
+    $remote = $sftp->_rel2abs($remote);
+    $local = _file_part($remote) unless defined $local;
+    my $local_is_fh = (ref $local and $local->isa('GLOB'));
 
     my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
@@ -1787,20 +1792,26 @@ sub get_content {
 }
 
 sub put {
-    @_ >= 3 or croak 'Usage: $sftp->put($local, $remote, %opts)';
+    @_ >= 2 or croak 'Usage: $sftp->put($local, $remote, %opts)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $local, $remote, %opts) = @_;
-    $remote = $sftp->_rel2abs($remote);
-    my $local_is_fh = (ref $local and $local->isa('GLOB'));
+    defined $local or croak "local file path is undefined";
 
     $sftp->_clear_error_and_status;
 
-    my $cb = delete $opts{callback};
+    my $local_is_fh = (ref $local and $local->isa('GLOB'));
+    unless (defined $remote) {
+        $local_is_fh and croak "unable to infer remote file name when a file handler is passed as local";
+        $remote = (File::Spec->splitpath($local))[2];
+    }
+    $remote = $sftp->_rel2abs($remote);
 
+    my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
     my $perm = delete $opts{perm};
-    my $copy_perm = delete $opts{exists $opts{copy_perm} ? 'copy_perm' : 'copy_perms'};
+    my $copy_perm = delete $opts{copy_perm};
+    $copy_perm = delete $opts{copy_perms} unless defined $copy_perm;
     my $copy_time = delete $opts{copy_time};
     my $overwrite = delete $opts{overwrite};
     my $resume = delete $opts{resume};
@@ -2475,10 +2486,12 @@ sub put_symlink {
 }
 
 sub rget {
-    @_ >= 3 or croak 'Usage: $sftp->rget($remote, $local, %opts)';
+    @_ >= 2 or croak 'Usage: $sftp->rget($remote, $local, %opts)';
     ${^TAINT} and &_catch_tainted_args;
-
     my ($sftp, $remote, $local, %opts) = @_;
+
+    defined $remote or croak "remote file path is undefined";
+    $local = File::Spec->curdir unless defined $local;
 
     # my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
@@ -2610,10 +2623,13 @@ sub rget {
 }
 
 sub rput {
-    @_ >= 3 or croak 'Usage: $sftp->rput($local, $remote, %opts)';
+    @_ >= 2 or croak 'Usage: $sftp->rput($local, $remote, %opts)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $local, $remote, %opts) = @_;
+
+    defined $local or croak "local path is undefined";
+    $remote = '.' unless defined $remote;
 
     # my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
@@ -2763,10 +2779,9 @@ sub mget {
     @_ >= 2 or croak 'Usage: $sftp->mget($remote, $localdir, %opts)';
     ${^TAINT} and &_catch_tainted_args;
 
-    my $sftp = shift;
-    my $remote = shift;
-    my $localdir = (@_ & 1 ? shift : undef);
-    my %opts = @_;
+    my ($sftp, $remote, $localdir, %opts) = @_;
+
+    defined $remote or croak "remote pattern is undefined";
 
     my $on_error = $opts{on_error};
     local $sftp->{_autodie} if $on_error;
@@ -2819,10 +2834,10 @@ sub mget {
 
 sub mput {
     @_ >= 2 or croak 'Usage: $sftp->mput($local, $remotedir, %opts)';
-    my $sftp = shift;
-    my $local = shift;
-    my $remotedir = (@_ & 1 ? shift : undef);
-    my %opts = @_;
+
+    my ($sftp, $local, $remotedir, %opts) = @_;
+
+    defined $local or die "local pattern is undefined";
 
     my $on_error = $opts{on_error};
     local $sftp->{_autodie} if $on_error;
