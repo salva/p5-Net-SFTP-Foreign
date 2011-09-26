@@ -1446,8 +1446,8 @@ sub get {
     }
     else {
         return undef if ($copy_time or $copy_perm);
-        $size = -1;
     }
+    $size = -1 unless defined $size;
 
     if ($resume and $resume eq 'auto') {
         undef $resume;

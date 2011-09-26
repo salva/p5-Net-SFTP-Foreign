@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_05
+        - handle incomplete attributes in stat response inside get
+
 1.68_04  Sep 7, 2011
         - accept passing undef as second argument to put, get, rput,
           rget, mput and mget
