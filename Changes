@@ -1,7 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
-1.68_05
+1.68_05  Sep 27, 2011
+        - this version is more picky about incomplete responses to
+          stat requests when copy_perms or copy_time are enabled
+          (implicetly or explicitly) on get method
         - handle incomplete attributes in stat response inside get
+          (bug report by Gus via the Perl Guru Forums).
 
 1.68_04  Sep 7, 2011
         - accept passing undef as second argument to put, get, rput,

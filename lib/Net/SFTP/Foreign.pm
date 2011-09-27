@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.68_04';
+our $VERSION = '1.68_05';
 
 use strict;
 use warnings;
@@ -1439,21 +1439,36 @@ sub get {
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
     $cleanup = ($atomic || $numbered) unless defined $cleanup;
 
-    my $size;
-    my $a = $sftp->stat($remote);
-    if (defined $a) {
-        $size = $a->size
-    }
-    else {
-        return undef if ($copy_time or $copy_perm);
-    }
+    my $a = do {
+        local $sftp->{_autodie};
+        $sftp->stat($remote);
+    };
+    my ($rperm, $size, $atime, $mtime) = ($a ? ($a->perm, $a->size, $a->atime, $a->mtime) : ());
     $size = -1 unless defined $size;
+
+    if ($copy_time and not defined $atime) {
+        $sftp->_ok_or_autodie and $sftp->_set_error(SFTP_ERR_REMOTE_STAT_FAILED,
+                                                    "Not enough information on stat, amtime not included");
+        return undef;
+    }
+
+    if ($copy_perm) {
+        if (defined $rperm) {
+            $perm = $rperm;
+        }
+        else {
+            $sftp->_ok_or_autodie and $sftp->_set_error(SFTP_ERR_REMOTE_STAT_FAILED,
+                                                        "Not enough information on stat, mode not included");
+            return undef
+        }
+    }
+    $sftp->_clear_error_and_status;
 
     if ($resume and $resume eq 'auto') {
         undef $resume;
-        if (my @lstat = CORE::stat $local) {
-            if (defined $a and $a->mtime <= $lstat[9]) {
-                $resume = 1;
+        if (defined $mtime) {
+            if (my @lstat = CORE::stat $local) {
+                $resume = ($mtime <= $lstat[9]);
             }
         }
     }
@@ -1485,15 +1500,7 @@ sub get {
             $debug and $debug & 128 and _debug("temporal local file name: $local");
         }
 
-        if ($copy_perm) {
-            my $aperm = $a->perm;
-            $aperm = 0666 unless defined $aperm;
-            $aperm =~ /^(\d+)$/ or die "perm is not numeric";
-            $perm = int $1;
-        }
-
-        $perm = (0666 & $neg_umask)
-	    unless (defined $perm or $local_is_fh);
+        $perm = (0666 & $neg_umask) unless defined $perm or $local_is_fh;
 
         if ($resume) {
             if (CORE::open $fh, '+<', $local) {
@@ -1702,19 +1709,10 @@ sub get {
             # we can be running on taint mode, so some checks are
             # performed to untaint data from the remote side.
 
-            if ($copy_time) {
-                if ($a->flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
-                    $a->atime =~ /^(\d+)$/ or die "Bad atime from remote file $remote";
-                    my $atime = int $1;
-                    $a->mtime =~ /^(\d+)$/ or die "Bad mtime from remote file $remote";
-                    my $mtime = int $1;
-
-                    unless (utime $atime, $mtime, $local) {
-                        $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
-                                          "Can't utime $local", $!);
-                        goto CLEANUP;
-                    }
-                }
+            if ($copy_time and not utime($atime, $mtime, $local)) {
+                $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
+                                  "Can't utime $local", $!);
+                goto CLEANUP;
             }
         }
 
