@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Attributes;
 
-our $VERSION = '1.45_02';
+our $VERSION = '1.68_05';
 
 use strict;
 use warnings;
@@ -32,24 +32,24 @@ sub new_from_stat {
 sub new_from_buffer {
     my ($class, $buf) = @_;
     my $self = $class->new;
-    my $flags = $self->{flags} = $buf->get_int32;
+    my $flags = $self->{flags} = $buf->get_int32_untaint;
 
     if ($flags & SSH2_FILEXFER_ATTR_SIZE) {
-	$self->{size} = $buf->get_int64;
+	$self->{size} = $buf->get_int64_untaint;
     }
 
     if ($flags & SSH2_FILEXFER_ATTR_UIDGID) {
-	$self->{uid} = $buf->get_int32;
-	$self->{gid} = $buf->get_int32;
+	$self->{uid} = $buf->get_int32_untaint;
+	$self->{gid} = $buf->get_int32_untaint;
     }
 
     if ($flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
-	$self->{perm} = $buf->get_int32;
+	$self->{perm} = $buf->get_int32_untaint;
     }
 
     if ($flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
-	$self->{atime} = $buf->get_int32;
-	$self->{mtime} = $buf->get_int32;
+	$self->{atime} = $buf->get_int32_untaint;
+	$self->{mtime} = $buf->get_int32_untaint;
     }
 
     if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {

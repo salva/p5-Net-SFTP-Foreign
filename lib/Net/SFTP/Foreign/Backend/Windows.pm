@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Windows;
 
-our $VERSION = '1.68_03';
+our $VERSION = '1.68_06';
 
 use strict;
 use warnings;

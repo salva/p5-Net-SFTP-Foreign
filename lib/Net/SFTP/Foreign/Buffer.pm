@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Buffer;
 
-our $VERSION = '1.52';
+our $VERSION = '1.68_05';
 
 use strict;
 use warnings;
@@ -38,7 +38,15 @@ sub get_int32 {
     unpack(N => substr(${$_[0]}, 0, 4, ''));
 }
 
-sub get_int64_quads { unpack Q => substr(${$_[0]}, 0, 8, '') }
+sub get_int32_untaint {
+    my ($v) = substr(${$_[0]}, 0, 4, '') =~ /(.*)/s;
+    get_int32(\$v);
+}
+
+sub get_int64_quads {
+    length ${$_[0]} >= 8 or return undef;
+    unpack Q => substr(${$_[0]}, 0, 8, '')
+}
 
 sub get_int64_no_quads {
     length ${$_[0]} >= 8 or return undef;
@@ -60,6 +68,11 @@ sub get_int64_no_quads {
 }
 
 *get_int64 = (HAS_QUADS ? \&get_int64_quads : \&get_int64_no_quads);
+
+sub get_int64_untaint {
+    my ($v) = substr(${$_[0]}, 0, 8, '') =~ /(.*)/s;
+    get_int64(\$v);
+}
 
 sub get_str {
     my $self = shift;

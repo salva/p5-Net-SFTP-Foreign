@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Compat;
 
-our $VERSION = '1.36';
+our $VERSION = '1.68_04';
 
 use warnings;
 use strict;
@@ -37,6 +37,11 @@ sub import {
     }
 }
 
+our %DEFAULTS = ( put => [],
+                  get => [],
+                  ls  => [],
+                  new => [] );
+
 BEGIN {
     my @forbidden = qw( setcwd cwd open opendir sftpread sftpwrite seek
                         tell eof write flush read getc lstat stat fstat
@@ -68,7 +73,7 @@ sub new {
 	$warn = sub { warn(CORE::join '', @_, "\n") };
     }
 
-    my $sftp = $class->SUPER::new($host, %opts);
+    my $sftp = $class->SUPER::new($host, @{$DEFAULTS{new}}, %opts);
 
     $sftp->{_compat_warn} = $warn;
 
@@ -102,6 +107,7 @@ sub get {
     my @content;
 
     $sftp->SUPER::get($remote, $local,
+                      @{$DEFAULTS{get}},
 		      dont_save => !defined($local),
 		      callback => sub {
 			  my ($sftp, $data, $off, $size) = @_;
@@ -119,6 +125,7 @@ sub put {
     my ($sftp, $local, $remote, $cb) = @_;
 
     $sftp->SUPER::put($local, $remote,
+                      @{$DEFAULTS{put}},
 		      (defined $cb ? (callback => $cb) : ()));
     $sftp->_warn_error;
     !$sftp->SUPER::error;
@@ -128,13 +135,14 @@ sub ls {
     my ($sftp, $path, $cb) = @_;
     if ($cb) {
 	$sftp->SUPER::ls($path,
+                         @{$DEFAULTS{ls}},
 			 wanted => sub { _rebless_attrs($_[1]->{a});
 					 $cb->($_[1]);
 					 0 } );
 	return ();
     }
     else {
-	if (my $ls = $sftp->SUPER::ls($path)) {
+	if (my $ls = $sftp->SUPER::ls($path, @{$DEFAULTS{ls}})) {
 	    _rebless_attrs($_->{a}) for @$ls;
 	    return @$ls;
 	}
@@ -240,9 +248,37 @@ the C<Net::SFTP> and L<Net::SFTP::Attributes> packages so no other
 parts of the program have to modified in order to move from Net::SFTP
 to Net::SFTP::Foreign.
 
+=head2 Setting defaults
+
+The hash C<%Net::SFTP::Foreign::DEFAULTS> can be used to set default
+values for L<Net::SFTP::Foreign> methods called under the hood and
+otherwise not accesible through the Net::SFTP API.
+
+The entries currently supported are:
+
+=over
+
+=item new => \@opts
+
+extra options passed to Net::SFTP::Foreign constructor.
+
+=item get => \@opts
+
+extra options passed to Net::SFTP::Foreign::get method.
+
+=item put => \@opts
+
+extra options passed to Net::SFTP::Foreign::put method.
+
+=item ls  => \@opts
+
+extra options passed to Net::SFTP::Foreign::ls method.
+
+=back
+
 =head1 COPYRIGHT
 
-Copyright (c) 2006-2008 Salvador FandiE<ntilde>o
+Copyright (c) 2006-2008, 2011 Salvador FandiE<ntilde>o
 
 All rights reserved.  This program is free software; you can
 redistribute it and/or modify it under the same terms as Perl itself.
