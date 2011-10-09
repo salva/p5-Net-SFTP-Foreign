@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.67';
+our $VERSION = '1.68_03';
 
 use strict;
 use warnings;
@@ -9,8 +9,7 @@ use Carp;
 our @CARP_NOT = qw(Net::SFTP::Foreign);
 
 use Fcntl qw(O_NONBLOCK F_SETFL F_GETFL);
-use IPC::Open3;
-use IPC::Open2;
+use POSIX ();
 use Net::SFTP::Foreign::Helpers qw(_tcroak _ensure_list _debug _hexdump $debug);
 use Net::SFTP::Foreign::Constants qw(SSH2_FX_BAD_MESSAGE
 				     SFTP_ERR_REMOTE_BAD_MESSAGE);
@@ -40,34 +39,71 @@ sub _open_dev_null {
     $dev_null
 }
 
-sub _ipc_open2_bug_workaround {
-    # in some cases, IPC::Open3::open2 returns from the child
-    my $pid = shift;
-    unless ($pid == $$) {
-        require POSIX;
-        POSIX::_exit(-1);
+sub _fileno_dup_over {
+    my ($good_fn, $fh) = @_;
+    if (defined $fh) {
+        my @keep_open;
+        my $fn = fileno $fh;
+        for (1..5) {
+            $fn >= $good_fn and return $fn;
+            $fn = POSIX::dup($fn);
+            push @keep_open, $fn;
+        }
+        POSIX::_exit(255);
     }
+    undef;
 }
 
 sub _open3 {
     my $backend = shift;
     my $sftp = shift;
-    if (defined $_[2]) {
-	my $sftp_err = $_[2];
-	my $fno = eval { no warnings; fileno($sftp_err) };
-	local *SSHERR;
-	unless (defined $fno and $fno >= 0 and
-		open(SSHERR, ">>&=", $fno)) {
-	    $sftp->_conn_failed("Unable to duplicate stderr redirection file handle: $!");
-	    return undef;
-	}
-	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-	return eval { open3(@_[1,0], ">&SSHERR", @_[3..$#_]) }
+    my ($dad_in, $dad_out, $child_in, $child_out);
+    unless (pipe ($dad_in, $child_out) and
+            pipe ($child_in, $dad_out)) {
+        $sftp->_conn_failed("Unable to created pipes: $!");
+        return;
     }
-    else {
-	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-	return eval { open2(@_[0,1], @_[3..$#_]) };
+    my $pid = fork;
+    unless ($pid) {
+        unless (defined $pid) {
+            $sftp->_conn_failed("Unable to fork new process: $!");
+            return;
+        }
+        close ($dad_in);
+        close ($dad_out);
+
+        shift; shift;
+        my $child_err = shift;
+
+        my $child_err_fno = eval { no warnings; fileno($child_err  ? $child_err : *STDERR) };
+        my $child_err_safe; # passed handler may be tied, so we
+                            # duplicate it in order to get a plain OS
+                            # handler.
+        if (defined $child_err_fno and $child_err_fno >= 0) {
+            open $child_err_safe, ">&=$child_err_fno" or POSIX::_exit(1);
+        }
+        else {
+            open $child_err_safe, ">/dev/null" or POSIX::_exit(1);
+        }
+
+        my $child_in_fno       = _fileno_dup_over(0 => $child_in      );
+        my $child_out_fno      = _fileno_dup_over(1 => $child_out     );
+        my $child_err_safe_fno = _fileno_dup_over(2 => $child_err_safe);
+
+        unless (($child_in_fno       == 0 or POSIX::dup2($child_in_fno,       0)) and
+                ($child_out_fno      == 1 or POSIX::dup2($child_out_fno,      1)) and
+                ($child_err_safe_fno == 2 or POSIX::dup2($child_err_safe_fno, 2))) {
+            POSIX::_exit(1);
+        }
+        do { exec @_ };
+        POSIX::_exit(1);
     }
+    close $child_in;
+    close $child_out;
+
+    $_[0] = $dad_in;
+    $_[1] = $dad_out;
+    $pid;
 }
 
 sub _init_transport {
@@ -190,8 +226,6 @@ sub _init_transport {
 	    $stderr_fh = $backend->_open_dev_null($sftp) or return;
 	}
 
-        my $this_pid = $$;
-
         if (defined $pass) {
 
             # user has requested to use a password or a passphrase for
@@ -209,37 +243,21 @@ sub _init_transport {
 
 	    my $child;
 	    my $expect;
-	    if (eval $IPC::Open3::VERSION >= 1.0105) {
-		# open2(..., '-') only works from this IPC::Open3 version upwards;
-		my $pty = IO::Pty->new;
-		$expect = Expect->init($pty);
-		$expect->raw_pty(1);
-		$expect->log_user($expect_log_user);
+            my $pty = IO::Pty->new;
+            $expect = Expect->init($pty);
+            $expect->raw_pty(1);
+            $expect->log_user($expect_log_user);
 
-                $redirect_stderr_to_tty and $stderr_fh = $pty->slave;
+            $redirect_stderr_to_tty and $stderr_fh = $pty->slave;
 
-		$child = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
+            $child = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
 
-		if (defined $child and !$child) {
-		    $pty->make_slave_controlling_terminal;
-		    do { exec @open2_cmd }; # work around suppress warning under mod_perl
-		    exit -1;
-		}
-		_ipc_open2_bug_workaround $this_pid;
-		# $pty->close_slave();
-	    }
-	    else {
-                $redirect_stderr_to_tty and
-                    croak "In order to support password/passphrase authentication with the Tectia client, " .
-                        "IPC::Open3 version 1.0105 is required (current version is $IPC::Open3::VERSION)";
-		$expect = Expect->new;
-		$expect->raw_pty(1);
-		$expect->log_user($expect_log_user);
-		$expect->spawn(@open2_cmd);
-		$sftp->{ssh_in} = $sftp->{ssh_out} = $expect;
-		$sftp->{_ssh_out_is_not_dupped} = 1;
-		$child = $expect->pid;
-	    }
+            if (defined $child and !$child) {
+                $pty->make_slave_controlling_terminal;
+                do { exec @open2_cmd }; # work around to suppress warning
+                exit -1;
+            }
+            # $pty->close_slave();
             unless (defined $child) {
                 $sftp->_conn_failed("Bad ssh command", $!);
                 return;
@@ -268,8 +286,6 @@ sub _init_transport {
         }
         else {
 	    $sftp->{pid} = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, @open2_cmd);
-            _ipc_open2_bug_workaround $this_pid;
-
             unless (defined $sftp->{pid}) {
                 $sftp->_conn_failed("Bad ssh command", $!);
                 return;

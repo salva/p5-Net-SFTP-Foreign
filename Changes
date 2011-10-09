@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_03  Oct 9, 2011
+        - do not use the buggy IPC::Open3 under Unix/Linux. This is a
+          mayor internal change, please report any connection problems
+          that were not happening with previous versions of the module
+        - allow testing Windows backend under Unix
+
 1.68_02  Jul 20, 2011
         - make unix2dos clever so it doesn't convert CR+LF sequences
           into CR+CR+LF (bug report by Pavel Albertyan).
@@ -13,7 +19,6 @@ Revision history for Net::SFTP::Foreign
         - released as stable in order to solve critical bug:
         - solve regresion introduced in 1.63_05 that caused ssh to
           hang when trying to access the tty
-
         - pass password to plink via -pw and generate a warning when
           doing so
         - support for key_path constructor argument
