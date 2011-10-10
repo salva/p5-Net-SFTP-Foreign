@@ -152,12 +152,12 @@ sub _init_transport {
 
             my $ssh_cmd = delete $opts->{ssh_cmd};
             $ssh_cmd = 'ssh' unless defined $ssh_cmd;
-            @open2_cmd = ($ssh_cmd);
+            @open2_cmd = _ensure_list $ssh_cmd;
 
             unless (defined $ssh_cmd_interface) {
-                $ssh_cmd_interface = ( $ssh_cmd =~ /\bplink(?:\.exe)?$/i ? 'plink'  :
-                                       $ssh_cmd =~ /\bsshg3$/i           ? 'tectia' :
-                                                                           'ssh'    );
+                $ssh_cmd_interface = ( "@open2_cmd" =~ /\bplink\b/i ? 'plink'  :
+                                       "@open2_cmd" =~ /\bsshg3\b/i ? 'tectia' :
+                                                                      'ssh'    );
             }
 
             my $port = delete $opts->{port};
@@ -165,8 +165,8 @@ sub _init_transport {
 	    my $ssh1 = delete $opts->{ssh1};
 
             my $more = delete $opts->{more};
-            carp "'more' argument looks like if it should be splited first"
-                if (defined $more and !ref($more) and $more =~ /^-\w\s+\S/);
+            defined $more and !ref($more) and $more =~ /^-\w\s+\S/ and
+                warnings::warnif("Net::SFTP::Foreign", "'more' argument looks like it should be split first")
             my @more = _ensure_list $more;
 
             my @preferred_authentications;
