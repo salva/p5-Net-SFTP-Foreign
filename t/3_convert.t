@@ -13,15 +13,12 @@ use common;
 use File::Spec;
 use Cwd qw(getcwd);
 
-my $server; # = 'localhost';
-my $sscmd = sftp_server;
-
 plan skip_all => "tests not supported on inferior OS"
     if (is_windows and eval "no warnings; getlogin ne 'salva'");
-plan skip_all => "sftp-server not found"
-    unless defined $sscmd;
 
 plan tests => 223;
+
+my @new_args = new_args;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
@@ -33,10 +30,6 @@ $SIG{ALRM} = sub {
 
 # don't set the alarm if we are being debugged!
 alarm 300 unless exists ${DB::}{sub};
-
-my @new_args = defined $server
-    ? (host => $server, timeout => 20)
-    : (open2_cmd => $sscmd, timeout => 20);
 
 chdir 't';
 my $lcwd = File::Spec->rel2abs('.');

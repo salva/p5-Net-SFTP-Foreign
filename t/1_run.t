@@ -13,19 +13,13 @@ use common;
 use File::Spec;
 use Cwd qw(getcwd);
 
-my $server = $ENV{NET_SFTP_FOREIGN_TESTING_SERVER}; # = 'localhost';
-my $backend = $ENV{NET_SFTP_FOREIGN_TESTING_BACKEND};
-
-my $sscmd = sftp_server unless defined $server;
-
 my $salva = eval "no warnings; getlogin eq 'salva'";
-
 plan skip_all => "tests not supported on inferior OS"
     if (is_windows and not $salva);
-plan skip_all => "sftp-server not found"
-    unless defined $server or defined $sscmd;
 
 plan tests => 790;
+
+my @new_args = new_args;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
@@ -37,12 +31,6 @@ $SIG{ALRM} = sub {
 
 # don't set the alarm if we are being debugged!
 alarm 300 unless exists ${DB::}{sub};
-
-my @new_args = defined $server
-    ? (host => $server, timeout => 20)
-    : (open2_cmd => $sscmd, timeout => 20);
-
-push @new_args, backend => $backend if defined $backend;
 
 my $sftp = eval { Net::SFTP::Foreign->new(@new_args) };
 diag($@) if $@;

@@ -24,7 +24,7 @@ sub sftp_server {
 	    $pf = Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES());
 	};
 	$pf = "C:/Program Files/" unless defined $pf;
-	
+
 	@ssh = ("$pf/openssh/bin/ssh.exe",
 		"$pf/openssh/usr/bin/ssh.exe",
 		"$pf/bin/ssh.exe",
@@ -49,9 +49,9 @@ sub sftp_server {
 
  SEARCH: for (@ssh) {
 	my ($vol, $dir) = File::Spec->splitpath($_);
-	
+
 	my $up = File::Spec->rel2abs(File::Spec->catpath($vol, $dir, File::Spec->updir));
-	
+
 	for ( File::Spec->catfile($vol, $dir, $ssname),
 	      File::Spec->catfile($up, 'lib', $ssname),
 	      File::Spec->catfile($up, 'libexec', $ssname),
@@ -63,7 +63,6 @@ sub sftp_server {
 
 	    if (-x $_) {
 		$sscmd = $_;
-		diag "sftp-server found at $_\n";
 		last SEARCH;
 	    }
 	}
@@ -86,7 +85,6 @@ sub filediff {
     while (1) {
 	my $la = read($fa, my $da, 2048);
 	my $lb = read($fb, my $db, 2048);
-	
 	return 1 unless (defined $la and defined $lb);
 	return 1 if $la != $lb;
 	return 0 if $la == 0;
@@ -102,6 +100,30 @@ sub mktestfile {
 
     print DL $data for (1..$count);
     close DL;
+}
+
+sub new_args {
+    my $host = $ENV{NET_SFTP_FOREIGN_TESTING_HOST}; # = 'localhost';
+    my $backend = $ENV{NET_SFTP_FOREIGN_TESTING_BACKEND};
+    my @diag;
+
+    my @args = (timeout => 20);
+    if (defined $backend) {
+        push @args, backend => $backend;
+        push @diag, "using $backend backend";
+    }
+    if (defined $host) {
+        push @diag, "connecting to host $host";
+        push @args, host => $host;
+    }
+    else {
+        my $ss_cmd = sftp_server;
+        defined $ss_cmd or plan skip_all => 'sftp-server not found';
+        push @diag, "sftp-server found at $ss_cmd";
+        push @args, open2_cmd => $ss_cmd;
+    }
+    diag join(", ", @diag) if @diag;
+    @args;
 }
 
 1;

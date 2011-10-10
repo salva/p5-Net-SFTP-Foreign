@@ -8,19 +8,16 @@ use Test::More;
 use lib "./t";
 use common;
 
-my $server; # = 'localhost';
-my $sscmd = sftp_server;
-
 plan skip_all => "tests not supported on inferior OS"
     if (is_windows and eval "no warnings; getlogin ne 'salva'");
-plan skip_all => "sftp-server not found"
-    unless defined $sscmd;
 
 plan tests => 2;
 
+my @new_args = new_args;
+
 use Net::SFTP::Foreign;
 
-my $sftp = Net::SFTP::Foreign->new(open2_cmd => $sscmd, timeout => 20);
+my $sftp = Net::SFTP::Foreign->new(@new_args);
 my $fn = File::Spec->rel2abs('t/data.txd');
 
 ok(my $fh = $sftp->open($fn), "open");
