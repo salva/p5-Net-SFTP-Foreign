@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_08
+        - accept an array reference in ssh_cmd
+        - use warnings::warnif to generate warnings
+        - minor doc improvements and corrections
+
 1.68_07  Oct 10, 2011
         - password authentication was not working with the new
           IPC::Open3 replacement code (bug report by Srini T)
@@ -127,7 +132,7 @@ Revision history for Net::SFTP::Foreign
           report by rfbits at PerlMonks)
 
 1.61  Sep 22, 2010
-        - remove some dead code introducing unneded constraints that
+        - remove some dead code introducing unneeded constraints that
           cause the Net::SSH2 backend to fail (bug report by Philippe
           Vouters)
 
