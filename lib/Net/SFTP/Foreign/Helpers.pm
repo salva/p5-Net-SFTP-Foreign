@@ -117,8 +117,8 @@ sub _ensure_list {
     local $@;
     local $SIG{__DIE__};
     local $SIG{__WARN__};
-    return @$l if eval { @$l >= 0 };
-    return ($l);
+    no warnings;
+    (eval { @$l; 1 } ? @$l : $l);
 }
 
 sub _glob_to_regex {
