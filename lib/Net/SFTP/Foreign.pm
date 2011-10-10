@@ -3366,6 +3366,10 @@ user executing the process.
 
 port number where the remote SSH server is listening
 
+=item ssh1 =E<gt> 1
+
+use old SSH1 approach for starting the remote SFTP server.
+
 =item more =E<gt> [@more_ssh_args]
 
 additional args passed to C<ssh> command.
@@ -3382,15 +3386,6 @@ to an array of arguments. For instance:
   more => ['-v']       # right
   more => "-c $cipher"    # wrong!!!
   more => [-c => $cipher] # right
-
-=item ssh_cmd_interface =E<gt> 'plink' or 'ssh' or 'tectia'
-
-declares the command line interface that the SSH client used to
-connect to the remote host understands. Currently C<plink>, C<ssh> and
-C<tectia> are supported.
-
-This option would be rarely required as the module infers the
-interface from the SSH command name.
 
 =item timeout =E<gt> $seconds
 
@@ -3443,15 +3438,32 @@ C<Expect::log_user> method documentation).
 
 =item ssh_cmd =E<gt> $sshcmd
 
+=item ssh_cmd =E<gt> \@sshcmd
+
 name of the external SSH client. By default C<ssh> is used.
 
 For instance:
 
-  my $sftp = Net::SFTP::Foreign->new($host, ssh_cmd => 'plink');
+  $sftp = Net::SFTP::Foreign->new($host, ssh_cmd => 'plink');
 
-=item ssh1 =E<gt> 1
+When an array reference is used, its elements are inserted at the
+beginning of the system call. That allows, for instance, to connect to
+the target host through some SSH proxy:
 
-use old SSH1 approach for starting the remote SFTP server.
+  $sftp = Net::SFTP::Foreign->new($host,
+              ssh_cmd => qw(ssh -l user proxy.server ssh));
+
+But note that the module will not handle password authentication for
+those proxies.
+
+=item ssh_cmd_interface =E<gt> 'plink' or 'ssh' or 'tectia'
+
+declares the command line interface that the SSH client used to
+connect to the remote host understands. Currently C<plink>, C<ssh> and
+C<tectia> are supported.
+
+This option would be rarely required as the module infers the
+interface from the SSH command name.
 
 =item transport =E<gt> $fh
 
@@ -3786,9 +3798,9 @@ C<stat> SFTP command before the data transfer starts).
 
 =item block_size =E<gt> $bytes
 
-size of the blocks the file is being splittered on for
-transfer. Incrementing this value can improve performance but some
-servers limit the maximum size.
+size of the blocks the file is being split on for transfer.
+Incrementing this value can improve performance but some servers limit
+the maximum size.
 
 =item queue_size =E<gt> $size
 
@@ -3933,10 +3945,9 @@ the transfer.
 
 =item block_size =E<gt> $bytes
 
-size of the blocks the file is being splittered on for
-transfer. Incrementing this value can improve performance but some
-servers limit its size and if this limit is overpassed the command
-will fail.
+size of the blocks the file is being split on for transfer.
+Incrementing this value can improve performance but some servers limit
+its size and if this limit is overpassed the command will fail.
 
 =item queue_size =E<gt> $size
 
