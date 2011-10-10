@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.68_07  Oct 10, 2011
+        - password authentication was not working with the new
+          IPC::Open3 replacement code (bug report by Srini T)
+        - empty password handling was also broken
+        - allow setting the backend on all the tests
+
 1.68_06  Oct 9, 2011
         - do not use the buggy IPC::Open3 under Unix/Linux. This is a
           mayor internal change, please report any connection problems
