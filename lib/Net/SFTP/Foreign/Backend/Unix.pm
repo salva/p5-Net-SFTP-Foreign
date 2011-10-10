@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.68_06';
+our $VERSION = '1.68_07';
 
 use strict;
 use warnings;
@@ -54,7 +54,7 @@ sub _fileno_dup_over {
     undef;
 }
 
-sub _open3 {
+sub _open4 {
     my $backend = shift;
     my $sftp = shift;
     my ($dad_in, $dad_out, $child_in, $child_out);
@@ -74,6 +74,9 @@ sub _open3 {
 
         shift; shift;
         my $child_err = shift;
+        my $pty = shift;
+
+        $pty->make_slave_controlling_terminal if defined $pty;
 
         my $child_err_fno = eval { no warnings; fileno($child_err  ? $child_err : *STDERR) };
         my $child_err_safe; # passed handler may be tied, so we
@@ -122,9 +125,9 @@ sub _init_transport {
     }
     else {
         my $pass = delete $opts->{passphrase};
-	my $passphrase;
+	my $pass_is_passphrase;
         if (defined $pass) {
-            $passphrase = 1;
+            $pass_is_passphrase = 1;
         }
         else {
             $pass = delete $opts->{password};
@@ -174,7 +177,7 @@ sub _init_transport {
 
             if ($ssh_cmd_interface eq 'plink') {
                 push @open2_cmd, -P => $port if defined $port;
-                if ($pass and !$passphrase) {
+                if (defined $pass and !$pass_is_passphrase) {
                     warnings::warnif("Net::SFTP::Foreign", "using insecure password authentication with plink");
                     push @open2_cmd, -pw => $pass;
                     undef $pass;
@@ -183,7 +186,7 @@ sub _init_transport {
             }
             elsif ($ssh_cmd_interface eq 'ssh') {
                 push @open2_cmd, -p => $port if defined $port;
-		if ($pass and !$passphrase) {
+		if (defined $pass and !$pass_is_passphrase) {
 		    push @open2_cmd, -o => 'NumberOfPasswordPrompts=1';
                     push @preferred_authentications, ('keyboard-interactive', 'password');
 		}
@@ -205,9 +208,8 @@ sub _init_transport {
 	    push @open2_cmd, ($ssh1 ? "/usr/lib/sftp-server" : -s => 'sftp');
         }
 
-        my $redirect_stderr_to_tty = ( (defined $pass or defined $passphrase) and
-                                       (delete $opts->{redirect_stderr_to_tty} or
-                                        $ssh_cmd_interface eq 'tectia' ) );
+        my $redirect_stderr_to_tty = ( defined $pass and
+                                       ( delete $opts->{redirect_stderr_to_tty} or $ssh_cmd_interface eq 'tectia' ) );
 
         $redirect_stderr_to_tty and ($stderr_discard or $stderr_fh)
             and croak "stderr_discard or stderr_fh can not be used together with password/passphrase "
@@ -236,9 +238,9 @@ sub _init_transport {
             eval { require Expect };
             $@ and croak "password authentication is not available, Expect is not installed";
 
-            local ($ENV{SSH_ASKPASS}, $ENV{SSH_AUTH_SOCK}) if $passphrase;
+            local ($ENV{SSH_ASKPASS}, $ENV{SSH_AUTH_SOCK}) if $pass_is_passphrase;
 
-            my $name = $passphrase ? 'Passphrase' : 'Password';
+            my $name = $pass_is_passphrase ? 'Passphrase' : 'Password';
             my $eto = $sftp->{_timeout} ? $sftp->{_timeout} * 4 : 120;
 
 	    my $child;
@@ -250,14 +252,7 @@ sub _init_transport {
 
             $redirect_stderr_to_tty and $stderr_fh = $pty->slave;
 
-            $child = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, '-');
-
-            if (defined $child and !$child) {
-                $pty->make_slave_controlling_terminal;
-                do { exec @open2_cmd }; # work around to suppress warning
-                exit -1;
-            }
-            # $pty->close_slave();
+            $child = $backend->_open4($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, $pty, @open2_cmd);
             unless (defined $child) {
                 $sftp->_conn_failed("Bad ssh command", $!);
                 return;
@@ -285,7 +280,7 @@ sub _init_transport {
 	    $expect->close_slave();
         }
         else {
-	    $sftp->{pid} = $backend->_open3($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, @open2_cmd);
+	    $sftp->{pid} = $backend->_open4($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, undef, @open2_cmd);
             unless (defined $sftp->{pid}) {
                 $sftp->_conn_failed("Bad ssh command", $!);
                 return;

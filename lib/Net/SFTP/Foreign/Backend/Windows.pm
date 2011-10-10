@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Windows;
 
-our $VERSION = '1.68_06';
+our $VERSION = '1.68_07';
 
 use strict;
 use warnings;
@@ -37,9 +37,11 @@ sub _open_dev_null {
     $dev_null
 }
 
-sub _open3 {
+sub _open4 {
     my $backend = shift;
     my $sftp = shift;
+
+    defined $_[3] and croak "setting child PTY is not supported on Windows";
 
     my $fno = eval { defined $_[2] ? fileno $_[2] : fileno *STDERR };
     unless (defined $fno and $fno >= 0) {
@@ -63,7 +65,7 @@ sub _open3 {
     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
 
     my $ppid = $$;
-    my $pid = eval { open3(@_[1,0], ">&SSHERR", @_[3..$#_]) };
+    my $pid = eval { open3(@_[1,0], ">&SSHERR", @_[4..$#_]) };
     $ppid == $$ or POSIX::_exit(-1);
     $pid;
 }
