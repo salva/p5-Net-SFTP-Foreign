@@ -11,9 +11,9 @@ use common;
 plan skip_all => "tests not supported on inferior OS"
     if (is_windows and eval "no warnings; getlogin ne 'salva'");
 
-plan tests => 2;
-
 my @new_args = new_args;
+
+plan tests => 2;
 
 use Net::SFTP::Foreign;
 

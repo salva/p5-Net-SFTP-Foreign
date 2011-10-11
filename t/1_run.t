@@ -17,9 +17,9 @@ my $salva = eval "no warnings; getlogin eq 'salva'";
 plan skip_all => "tests not supported on inferior OS"
     if (is_windows and not $salva);
 
-plan tests => 790;
-
 my @new_args = new_args;
+
+plan tests => 790;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags);
