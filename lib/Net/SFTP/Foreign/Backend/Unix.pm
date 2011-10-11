@@ -166,7 +166,7 @@ sub _init_transport {
 
             my $more = delete $opts->{more};
             defined $more and !ref($more) and $more =~ /^-\w\s+\S/ and
-                warnings::warnif("Net::SFTP::Foreign", "'more' argument looks like it should be split first")
+                warnings::warnif("Net::SFTP::Foreign", "'more' argument looks like it should be split first");
             my @more = _ensure_list $more;
 
             my @preferred_authentications;
