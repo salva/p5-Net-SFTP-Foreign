@@ -13,6 +13,7 @@ use POSIX ();
 use Net::SFTP::Foreign::Helpers qw(_tcroak _ensure_list _debug _hexdump $debug);
 use Net::SFTP::Foreign::Constants qw(SSH2_FX_BAD_MESSAGE
 				     SFTP_ERR_REMOTE_BAD_MESSAGE);
+use Time::HiRes qw(sleep time);
 
 sub _new { shift }
 
@@ -229,26 +230,18 @@ sub _init_transport {
 	}
 
         if (defined $pass) {
-
             # user has requested to use a password or a passphrase for
-            # authentication we use Expect to handle that
+            # authentication we use IO::Pty to handle that
 
-            eval { require IO::Pty };
-            $@ and croak "password authentication is not available, IO::Pty and Expect are not installed";
-            eval { require Expect };
-            $@ and croak "password authentication is not available, Expect is not installed";
+            eval { require IO::Pty; 1 }
+                or croak "password authentication not available, IO::Pty is not installed or failed to load: $@";
 
             local ($ENV{SSH_ASKPASS}, $ENV{SSH_AUTH_SOCK}) if $pass_is_passphrase;
 
             my $name = $pass_is_passphrase ? 'Passphrase' : 'Password';
-            my $eto = $sftp->{_timeout} ? $sftp->{_timeout} * 4 : 120;
 
 	    my $child;
-	    my $expect;
             my $pty = IO::Pty->new;
-            $expect = Expect->init($pty);
-            $expect->raw_pty(1);
-            $expect->log_user($expect_log_user);
 
             $redirect_stderr_to_tty and $stderr_fh = $pty->slave;
 
@@ -258,26 +251,67 @@ sub _init_transport {
                 return;
             }
             $sftp->{pid} = $child;
-            $sftp->{_expect} = $expect;
+            $sftp->{_pty} = $pty;
 
-            unless($expect->expect($eto, ':', '?')) {
-                $sftp->_conn_failed("$name not requested as expected", $expect->error);
-                return;
-            }
-	    my $before = $expect->before;
-	    if ($before =~ /^The authenticity of host /i or
-		$before =~ /^Warning: the \w+ host key for /i) {
-		$sftp->_conn_failed("the authenticity of the target host can not be established, connect from the command line first");
-		return;
-	    }
-            $expect->send("$pass\n");
-	    $sftp->{_password_sent} = 1;
+            $debug and $debug & 65536 and _debug "starting password authentication";
+            my $rv = '';
+            vec($rv, fileno($pty), 1) = 1;
+            my $buffer;
+            my $at = 0;
+            my $start_time = time;
+            while(1) {
+                if (defined $sftp->{_timeout}) {
+                    $debug and $debug & 65536 and _debug "checking timeout, max: $sftp->{_timeout}, ellapsed: " . (time - $start_time);
+                    if (time - $start_time > $sftp->{_timeout}) {
+                        $sftp->_conn_failed("login procedure timed out");
+                        return;
+                    }
+                }
 
-            unless ($expect->expect($eto, "\n")) {
-                $sftp->_conn_failed("$name interchange did not complete", $expect->error);
-                return;
+                if (waitpid $child, POSIX::WNOHANG > 0) {
+                    undef $sftp->{pid};
+                    my $err = $? >> 8;
+                    $sftp->_conn_failed("SSH slave exited unexpectedly with error code $err");
+                    return;
+                }
+
+                $debug and $debug & 65536 and _debug "waiting for data from the pty to become available";
+
+                my $rv1 = $rv;
+                select($rv1, undef, undef, 1) > 0 or next;
+                if (my $bytes = sysread($pty, $buffer, 4096, length $buffer)) {
+                    if ($debug and $debug & 65536) {
+                        _debug "$bytes bytes readed from pty:";
+                        _hexdump substr($buffer, -$bytes);
+                    }
+                    if ($buffer =~ /^The authenticity of host/mi or
+                        $buffer =~ /^Warning: the \S+ host key for/mi) {
+                        $sftp->_conn_failed("the authenticity of the target host can't be established, " .
+                                            "the remote host public key is probably not present on the " .
+                                            "'~/.ssh/known_hosts' file");
+                        return;
+                    }
+                    if ($at == 0) {
+                        $debug and $debug & 65536 and _debug "looking for password prompt";
+                        if ($buffer =~ /[:?]\s*$/) {
+                            $debug and $debug & 65536 and _debug "sending password";
+                            print $pty "$pass\n";
+                            $at = length $buffer;
+                        }
+                    }
+                    else {
+                        $debug and $debug & 65536 and _debug "looking for password ok";
+                        last if substr($buffer, $at) =~ /\n$/;
+                    }
+                }
+                else {
+                    $debug and $debug & 65536 and _debug "no data available from pty, delaying until next read";
+                    sleep 0.2;
+                }
+
             }
-	    $expect->close_slave();
+            $debug and $debug & 65536 and _debug "password authentication done";
+	    $pty->close_slave();
         }
         else {
 	    $sftp->{pid} = $backend->_open4($sftp, $sftp->{ssh_in}, $sftp->{ssh_out}, $stderr_fh, undef, @open2_cmd);

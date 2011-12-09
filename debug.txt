@@ -14,3 +14,4 @@
  8192 - mkpath
 16384 - put method
 32768 - recursive methods
+65536 - password login

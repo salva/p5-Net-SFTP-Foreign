@@ -14,7 +14,7 @@ Perl modules:
 	Test::More (mandatory)
 	File::Which (optional, only for testing)
 	Sort::Key (optional, for better performance)
-        Expect and its dependencies (optional, only required if
+        IO::Pty and its dependencies (optional, only required if
           password authentication is going to be used)
 
 If the sftp-server command is available it will be used to perform

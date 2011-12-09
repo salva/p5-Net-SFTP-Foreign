@@ -3423,18 +3423,23 @@ asks C<ssh> to use the key in the given file for authentication.
 
 =item password =E<gt> $password
 
+Logs into the remote host using password authentication with the given
+password.
+
+Password authentication is only available if the module L<IO::Pty> is
+installed. Note also, that on Windows this module is only available
+when running the Cygwin port of Perl.
+
 =item passphrase =E<gt> $passphrase
 
-uses L<Expect> to handle password authentication or keys requiring a
-passphrase.
+Logs into the remote server using a passphrase protected private key.
 
-Note that password authentication on Windows OSs only works when the
-Cygwin port of Perl is used.
+Requires also the module L<IO::Pty>.
 
 =item expect_log_user =E<gt> $bool
 
-activates password/passphrase authentication interaction logging (see
-C<Expect::log_user> method documentation).
+This feature is obsolete as Expect is not used anymore to handle
+password authentication.
 
 =item ssh_cmd =E<gt> $sshcmd
 

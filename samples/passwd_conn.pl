@@ -3,7 +3,7 @@
 # This sample is obsolete and should not be used as a reference.
 #
 # Current versions of Net::SFTP::Foreign support password
-# authentication as long as the Expect module is installed:
+# authentication as long as the IO::Pty module is installed:
 #
 #     my $sftp = Net::SFTP::Foreign->new($host,
 #                                        user => "me",
