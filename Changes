@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.69  Dic 9, 2011
+        - release as stable
+
 1.68_08 Oct 11, 2011
         - accept an array reference in ssh_cmd
         - use warnings::warnif to generate warnings
