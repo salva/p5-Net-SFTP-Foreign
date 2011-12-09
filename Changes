@@ -1,5 +1,12 @@
 Revision history for Net::SFTP::Foreign
 
+1.70_01  Dic 9, 2011
+        - do not use Expect to handle password authentication but a
+          hand-crafted method that uses IO::Pty directly
+        - solve problem with connections stalling when using password
+          authentication and the remote host was unreachable (bug
+          report by Srini T)
+
 1.69  Dic 9, 2011
         - release as stable
 
