@@ -3402,7 +3402,7 @@ Version 3 of the SFTP protocol (the one supported by this module)
 knows nothing about the character encoding used on the remote
 filesystem to represent file and directory names.
 
-This option allows to select the encoding used in the remote
+This option allows one to select the encoding used in the remote
 machine. The default value is C<utf8>.
 
 For instance:
@@ -3476,8 +3476,8 @@ interface from the SSH command name.
 
 =item transport =E<gt> [$in_fh, $out_fh, $pid]
 
-allows to use an already open pipe or socket as the transport for the
-SFTP protocol.
+allows one to use an already open pipe or socket as the transport for
+the SFTP protocol.
 
 It can be (ab)used to make this module work with password
 authentication or with keys requiring a passphrase.
@@ -3494,8 +3494,8 @@ process if it doesn't exit by itself.
 
 =item open2_cmd =E<gt> $cmd;
 
-allows to completely redefine how C<ssh> is called. Its arguments are
-passed to L<IPC::Open2::open2> to open a pipe to the remote
+allows one to completely redefine how C<ssh> is called. Its arguments
+are passed to L<IPC::Open2::open2> to open a pipe to the remote
 server.
 
 =item stderr_fh =E<gt> $fh
@@ -3568,7 +3568,7 @@ the object goes out of scope. But on scripts that fork new processes,
 that results on the SSH connection being closed by the first process
 where the object goes out of scope, something undesirable.
 
-This option allows to work-around this issue to some extend.
+This option allows one to work-around this issue to some extend.
 
 The acceptable values for C<$ad> are:
 
@@ -3692,8 +3692,9 @@ file. Default is to copy them after applying the local process umask.
 
 =item umask =E<gt> $umask
 
-allows to select the umask to apply when setting the permissions of
-the copied file. Default is to use the umask for the current process.
+allows one to select the umask to apply when setting the permissions
+of the copied file. Default is to use the umask for the current
+process.
 
 =item perm =E<gt> $perm
 
@@ -3810,8 +3811,8 @@ the maximum size.
 =item queue_size =E<gt> $size
 
 read and write requests are pipelined in order to maximize transfer
-throughput. This option allows to set the maximum number of requests
-that can be concurrently waiting for a server response.
+throughput. This option allows one to set the maximum number of
+requests that can be concurrently waiting for a server response.
 
 =back
 
@@ -3864,8 +3865,9 @@ file. Default is to copy them after applying the local process umask.
 
 =item umask =E<gt> $umask
 
-allows to select the umask to apply when setting the permissions of
-the copied file. Default is to use the umask for the current process.
+allows one to select the umask to apply when setting the permissions
+of the copied file. Default is to use the umask for the current
+process.
 
 =item perm =E<gt> $perm
 
@@ -3902,7 +3904,7 @@ The local file contents are transferred into a temporal file that
 once the copy completes is renamed to the target destination.
 
 This operation relies on the SSH server to perform an
-overwriting/non-overwritting atomic rename operation free of race
+overwriting/non-overwriting atomic rename operation free of race
 conditions.
 
 OpenSSH server does it correctly on top of Linux/UNIX native file
@@ -3957,8 +3959,8 @@ its size and if this limit is overpassed the command will fail.
 =item queue_size =E<gt> $size
 
 read and write requests are pipelined in order to maximize transfer
-throughput. This option allows to set the maximum number of requests
-that can be concurrently waiting for a server response.
+throughput. This option allows one to set the maximum number of
+requests that can be concurrently waiting for a server response.
 
 =item late_set_perm =E<gt> $bool
 
@@ -4315,8 +4317,8 @@ arguments, the C<$sftp> object and the entry causing the error.
 
 =item no_wanted =E<gt> ...
 
-This option allows to select which files and directories have to be
-copied. See also C<ls> method docs.
+This option allows one to select which files and directories have to
+be copied. See also C<ls> method docs.
 
 If a directory is discarded all of its contents are also discarded (as
 it is not possible to copy child files without creating the directory
@@ -4385,8 +4387,8 @@ arguments, the C<$sftp> object and the entry causing the error.
 
 =item no_wanted =E<gt> ...
 
-This option allows to select which files and directories have to be
-copied. See also C<ls> method docs.
+This option allows one to select which files and directories have to
+be copied. See also C<ls> method docs.
 
 If a directory is discarded all of its contents are also discarded (as
 it is not possible to copy child files without creating the directory
@@ -4489,12 +4491,12 @@ this module and with perl built-ins. For instance:
     or die $sftp->error;
   while (<$fh1>) { ... }
 
-  # writting to the remote file
+  # writing to the remote file
   use Net::SFTP::Foreign::Constants qw(:flags);
   my $fh2 = $sftp->open("/foo/bar", SSH2_FXF_WRITE|SSH2_FXF_CREAT)
     or die $sftp->error;
   print $fh2 "printing on the remote file\n";
-  $sftp->write($fh2, "writting more");
+  $sftp->write($fh2, "writing more");
 
 The C<$flags> bitmap determines how to open the remote file as defined
 in the SFTP protocol draft (the following constants can be imported
@@ -4538,8 +4540,8 @@ C<SSH2_FXF_CREAT> must also be specified if this flag is used.
 
 =back
 
-When creating a new remote file, C<$attrs> allows to set its initial
-attributes. C<$attrs> has to be an object of class
+When creating a new remote file, C<$attrs> allows one to set its
+initial attributes. C<$attrs> has to be an object of class
 L<Net::SFTP::Foreign::Attributes>.
 
 =item $sftp-E<gt>close($handle)
@@ -4948,8 +4950,8 @@ B<A>: Try passing the C<late_set_perm> option to the put method:
      or die "unable to transfer file: " . $sftp->error;
 
 Some servers do not support the C<fsetstat> method on open file
-handles. Setting this flag allows to delay that operation until the
-file has been completely transferred and the remote file handle
+handles. Setting this flag allows one to delay that operation until
+the file has been completely transferred and the remote file handle
 closed.
 
 Send me a bug report containing a dump of your $sftp object so I
@@ -5115,14 +5117,14 @@ from the L<sftp(1)> and L<sftp-server(8)> manual pages.
 Net::SFTP::Foreign integrates nicely with my other module
 L<Net::OpenSSH>.
 
-L<Net::SFTP::Foreign::Backend::Net_SSH2> allows to run
+L<Net::SFTP::Foreign::Backend::Net_SSH2> allows one to run
 Net::SFTP::Foreign on top of L<Net::SSH2> (nowadays, this combination
 is probably the best option under Windows).
 
 Modules offering similar functionality available from CPAN are
 L<Net::SFTP> and L<Net::SSH2>.
 
-L<Test::SFTP> allows to run tests against a remote SFTP server.
+L<Test::SFTP> allows one to run tests against a remote SFTP server.
 
 L<autodie>.
 

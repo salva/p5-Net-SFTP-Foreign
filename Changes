@@ -1,6 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
 1.70_02  Dic 10, 2011
+        - several spelling corrections (patch contributed by Nicholas
+          Bamber)
         - syntax error, POSIX::WNOHANG was recognized as bareword in
           perl 5.8
 
