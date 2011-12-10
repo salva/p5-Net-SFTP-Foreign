@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.70_02  Dic 10, 2011
+        - syntax error, POSIX::WNOHANG was recognized as bareword in
+          perl 5.8
+
 1.70_01  Dic 9, 2011
         - do not use Expect to handle password authentication but a
           hand-crafted method that uses IO::Pty directly
