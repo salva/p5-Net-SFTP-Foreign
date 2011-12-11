@@ -326,7 +326,7 @@ sub _init_transport {
 
 sub _after_init {
     my ($backend, $sftp) = @_;
-    unless ($sftp->error) {
+    if ($sftp->{pid} and not $sftp->error) {
         # do not propagate signals sent from the terminal to the
         # slave SSH:
         local ($@, $!);
