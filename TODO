@@ -8,9 +8,10 @@ TODO
 
 - add support for encodings
 
-- detect unknown host key checking
-
 - add support for process filters on put/get operations
+
+- make setstat failures optionally non fatal inside put method
+  (relaxed)
 
 DONE
 ==== 
@@ -26,4 +27,6 @@ DONE
 
 - improve password login, remove Expect dependency and try to backport
   as much as possible fron Net::OpenSSH
+
+- detect unknown host key checking
 
