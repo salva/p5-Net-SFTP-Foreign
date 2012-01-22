@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Compat;
 
-our $VERSION = '1.68_04';
+our $VERSION = '1.70_04';
 
 use warnings;
 use strict;
@@ -101,6 +101,7 @@ sub status {
 }
 
 sub get {
+    croak '$Usage: $sftp->get($local, $remote, $cb)' if @_ < 3 or @_ > 4;
     my ($sftp, $remote, $local, $cb) = @_;
 
     my $save = defined(wantarray);
@@ -122,6 +123,7 @@ sub get {
 }
 
 sub put {
+    croak '$Usage: $sftp->put($local, $remote, $cb)' if @_ < 3 or @_ > 4;
     my ($sftp, $local, $remote, $cb) = @_;
 
     $sftp->SUPER::put($local, $remote,
@@ -132,6 +134,7 @@ sub put {
 }
 
 sub ls {
+    croak '$Usage: $sftp->ls($path, $cb)' if @_ < 2 or @_ > 3;
     my ($sftp, $path, $cb) = @_;
     if ($cb) {
 	$sftp->SUPER::ls($path,
@@ -198,8 +201,10 @@ sub _rebless_attrs {
 }
 
 sub _gen_do_stat {
-    my $method = "SUPER::" . shift;
+    my $name = shift;
+    my $method = "SUPER::$name";
     return sub {
+        croak '$Usage: $sftp->'.$name.'($local, $remote, $cb)' if @_ != 2;
 	my $sftp = shift;
 	if (my $a = $sftp->$method(@_)) {
 	    return _rebless_attrs($a);
