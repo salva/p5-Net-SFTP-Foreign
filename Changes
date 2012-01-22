@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.70_04  Jan 22, 2011
+        - check number of arguments passed to Compat methods
+
 1.70_03  Dec 11, 2011
         - remove uninitialized warning when using a custom transport
           (bug report by Kay-C. Baufeld)

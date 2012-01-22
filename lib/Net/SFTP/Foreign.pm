@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_03';
+our $VERSION = '1.70_04';
 
 use strict;
 use warnings;
@@ -5130,7 +5130,7 @@ L<autodie>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2011 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2012 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 
