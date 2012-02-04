@@ -5107,6 +5107,8 @@ Also, the following features should be considered experimental:
 
 - autodie mode
 
+- best_effort feature
+
 =head1 SUPPORT
 
 To report bugs, send me and email or use the CPAN bug tracking system
