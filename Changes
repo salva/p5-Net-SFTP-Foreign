@@ -1,6 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
 1.70_05
+        - on Compat::get $remote argument is optional
+        - make Compat::(get|put) use best_effort by default
         - add support for best_effort feature
 
 1.70_04  Jan 22, 2011
