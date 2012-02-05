@@ -101,7 +101,7 @@ sub status {
 }
 
 sub get {
-    croak '$Usage: $sftp->get($local, $remote, $cb)' if @_ < 3 or @_ > 4;
+    croak '$Usage: $sftp->get($local, $remote, $cb)' if @_ < 2 or @_ > 4;
     my ($sftp, $remote, $local, $cb) = @_;
 
     my $save = defined(wantarray);
