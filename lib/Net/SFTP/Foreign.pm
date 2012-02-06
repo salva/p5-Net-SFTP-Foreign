@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_05';
+our $VERSION = '1.70_06';
 
 use strict;
 use warnings;
@@ -35,7 +35,7 @@ use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
                                    _sort_entries _gen_wanted
                                    _gen_converter _hexdump
                                    _ensure_list _catch_tainted_args
-                                   _file_part);
+                                   _file_part _umask_save_and_set);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -1424,14 +1424,12 @@ sub get {
         undef $resume;
     }
 
-    my $oldumask = umask;
     my $neg_umask;
-
     if (defined $perm) {
 	$neg_umask = $perm;
     }
     else {
-	$umask = $oldumask unless defined $umask;
+	$umask = umask unless defined $umask;
 	$neg_umask = 0777 & ~$umask;
     }
 
@@ -1555,18 +1553,15 @@ sub get {
                 unlink $local if ($overwrite and !$numbered);
 
                 while (1) {
-                    umask $lumask;
+                    my $save = _umask_save_and_set $lumask;
                     sysopen ($fh, $local, $flags, $perm) and last;
-                    my $err = $!;
-                    umask $oldumask;
                     unless ($numbered and -e $local) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
-                                          "Can't open $local", $err);
+                                          "Can't open $local", $!);
                         return undef;
                     }
                     _inc_numbered($local);
                 }
-                umask $oldumask;
                 $$numbered = $local if ref $numbered;
 		binmode $fh;
 		$lstart = sysseek($fh, 0, 1) if $append;
@@ -2213,7 +2208,7 @@ sub put_content {
     my ($sftp, undef, $remote, %opts) = @_;
 
     my %put_opts = ( map { $_ => delete $opts{$_} }
-                     qw(perm block_size queue_size overwrite conversion resume
+                     qw(perm umask block_size queue_size overwrite conversion resume
                         numbered late_set_perm atomic best_effort));
 
     unless (open my $fh, '<', \$_[0]) {
@@ -2550,7 +2545,7 @@ sub rget {
     my $qremote = quotemeta $remote;
     my $reremote = qr/^$qremote(.*)$/i;
 
-    $umask = umask $umask if (defined $umask);
+    my $save = _umask_save_and_set $umask;
 
     $copy_perm = 1 unless defined $copy_perm;
     $copy_time = 1 unless defined $copy_time;
@@ -2641,8 +2636,6 @@ sub rget {
 		     }
 		     return undef;
 		 } );
-
-    umask $umask if defined $umask;
 
     return $count;
 }
@@ -2821,7 +2814,7 @@ sub mget {
 			    qw(overwrite numbered));
 
     my %get_opts = (map { $_ => delete $opts{$_} }
-		    qw(umask copy_perm copy_time block_size queue_size
+		    qw(umask perm copy_perm copy_time block_size queue_size
                        overwrite conversion resume numbered atomic best_effort));
 
     %opts and _croak_bad_options(keys %opts);
@@ -2876,7 +2869,7 @@ sub mput {
 			    qw(overwrite numbered));
 
     my %put_opts = (map { $_ => delete $opts{$_} }
-		    qw(umask copy_perm copy_time block_size queue_size
+		    qw(umask perm copy_perm copy_time block_size queue_size
                        overwrite conversion resume numbered late_set_perm
                        atomic best_effort));
 
