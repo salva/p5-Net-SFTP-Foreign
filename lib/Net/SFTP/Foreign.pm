@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_04';
+our $VERSION = '1.70_05';
 
 use strict;
 use warnings;
@@ -1397,6 +1397,7 @@ sub get {
     my $numbered = delete $opts{numbered};
     my $cleanup = delete $opts{cleanup};
     my $atomic = delete $opts{atomic};
+    my $best_effort = delete $opts{best_effort};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1447,14 +1448,22 @@ sub get {
     $size = -1 unless defined $size;
 
     if ($copy_time and not defined $atime) {
-        $sftp->_ok_or_autodie and $sftp->_set_error(SFTP_ERR_REMOTE_STAT_FAILED,
-                                                    "Not enough information on stat, amtime not included");
-        return undef;
+        if ($best_effort) {
+            undef $copy_time;
+        }
+        else {
+            $sftp->_ok_or_autodie and $sftp->_set_error(SFTP_ERR_REMOTE_STAT_FAILED,
+                                                        "Not enough information on stat, amtime not included");
+            return undef;
+        }
     }
 
     if ($copy_perm) {
         if (defined $rperm) {
             $perm = $rperm;
+        }
+        elsif ($best_effort) {
+            undef $copy_perm
         }
         else {
             $sftp->_ok_or_autodie and $sftp->_set_error(SFTP_ERR_REMOTE_STAT_FAILED,
@@ -1709,10 +1718,12 @@ sub get {
             # we can be running on taint mode, so some checks are
             # performed to untaint data from the remote side.
 
-            if ($copy_time and not utime($atime, $mtime, $local)) {
-                $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
-                                  "Can't utime $local", $!);
-                goto CLEANUP;
+            if ($copy_time) {
+                unless (utime($atime, $mtime, $local) or $best_effort) {
+                    $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
+                                      "Can't utime $local", $!);
+                    goto CLEANUP;
+                }
             }
         }
 
@@ -1821,6 +1832,7 @@ sub put {
     my $numbered = delete $opts{numbered};
     my $atomic = delete $opts{atomic};
     my $cleanup = delete $opts{cleanup};
+    my $best_effort = delete $opts{best_effort};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1996,7 +2008,7 @@ sub put {
             }
             if (defined $lsize and $writeoff == $lsize) {
                 if (defined $perm and $rattrs->perm != $perm) {
-                    return $sftp->setstat($remote, $attrs);
+                    return $sftp->_best_effort($best_effort, setstat => $remote, $attrs);
                 }
                 return 1;
             }
@@ -2059,7 +2071,7 @@ sub put {
         # $late_set_perm work around is for some servers that do not
         # support changing the permissions of open files
         if (defined $perm and !$late_set_perm) {
-            $sftp->fsetstat($rfh, $attrs) or goto CLEANUP;
+            $sftp->_best_effort($best_effort, fsetstat => $rfh, $attrs) or goto CLEANUP;
         }
 
         my $rfid = $sftp->_rfid($rfh);
@@ -2171,15 +2183,12 @@ sub put {
 
         goto CLEANUP if $sftp->{_error};
 
-        # for servers that does not support setting permissions on open files
-        if (defined $perm and $late_set_perm) {
-            $sftp->setstat($remote, $attrs);
-        }
-
-        if ($copy_time) {
-            $attrs = Net::SFTP::Foreign::Attributes->new;
-            $attrs->set_amtime($latime, $lmtime);
-            $sftp->setstat($remote, $attrs) or goto CLEANUP;
+        # set perm for servers that does not support setting
+        # permissions on open files and also atime and mtime:
+        if ($copy_time or ($late_set_perm and defined $perm)) {
+            $attrs->set_perm unless $late_set_perm and defined $perm;
+            $attrs->set_amtime($latime, $lmtime) if $copy_time;
+            $sftp->_best_effort($best_effort, setstat => $remote, $attrs) or goto CLEANUP
         }
 
         if ($atomic) {
@@ -2525,7 +2534,7 @@ sub rget {
 
     my %get_opts = (map { $_ => delete $opts{$_} }
                     qw(block_size queue_size overwrite conversion
-                       resume numbered atomic));
+                       resume numbered atomic best_effort));
 
     if ($get_opts{resume} and $get_opts{conversion}) {
         carp "resume option is useless when data conversion has also been requested";
@@ -2661,8 +2670,9 @@ sub rput {
 			      delete $opts{no_wanted} );
 
     my %put_opts = (map { $_ => delete $opts{$_} }
-		    qw(block_size queue_size overwrite conversion
-                       resume numbered late_set_perm atomic));
+		    qw(block_size queue_size overwrite
+                       conversion resume numbered
+                       late_set_perm atomic best_effort));
 
     my %put_symlink_opts = (map { $_ => $put_opts{$_} }
                             qw(overwrite numbered));
@@ -2812,7 +2822,7 @@ sub mget {
 
     my %get_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask copy_perm copy_time block_size queue_size
-                       overwrite conversion resume numbered atomic));
+                       overwrite conversion resume numbered atomic best_effort));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -2867,7 +2877,8 @@ sub mput {
 
     my %put_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask copy_perm copy_time block_size queue_size
-                       overwrite conversion resume numbered late_set_perm atomic));
+                       overwrite conversion resume numbered late_set_perm
+                       atomic best_effort));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -3779,6 +3790,10 @@ This option is set to by default when there is not possible to resume
 the transfer afterwards (i.e., when using `atomic` or `numbered`
 options).
 
+=item best_effort =E<gt> 1
+
+Ignore minor errors as setting time or permissions.
+
 =item conversion =E<gt> $conversion
 
 on the fly data conversion of the file contents can be performed with
@@ -3940,6 +3955,10 @@ This option is set to by default when there is not possible to resume
 the transfer afterwards (i.e., when using `atomic` or `numbered`
 options).
 
+=item best_effort =E<gt> 1
+
+Ignore minor errors, as setting time and permissions on the remote
+file.
 
 =item conversion =E<gt> $conversion
 
@@ -4352,6 +4371,8 @@ first!).
 
 =item resume =E<gt> $resume
 
+=item best_effort =E<gt> $best_effort
+
 See C<get> method docs.
 
 =back
@@ -4421,6 +4442,8 @@ first!).
 =item conversion =E<gt> $conversion
 
 =item resume =E<gt> $resume
+
+=item best_effort =E<gt> $best_effort
 
 =item late_set_perm =E<gt> $bool
 
@@ -5101,6 +5124,8 @@ Also, the following features should be considered experimental:
 - numbered feature
 
 - autodie mode
+
+- best_effort feature
 
 =head1 SUPPORT
 

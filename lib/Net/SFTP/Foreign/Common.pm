@@ -128,6 +128,14 @@ sub _set_errno {
     }
 }
 
+sub _best_effort {
+    my $sftp = shift;
+    my $best_effort = shift;
+    my $method = shift;
+    local ($sftp->{_error}, $sftp->{_autodie}) if $best_effort;
+    $sftp->$method(@_) || 1;
+}
+
 sub _call_on_error {
     my ($sftp, $on_error, $entry) = @_;
     $on_error and $sftp->error

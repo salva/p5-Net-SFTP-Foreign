@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Compat;
 
-our $VERSION = '1.70_04';
+our $VERSION = '1.70_05';
 
 use warnings;
 use strict;
@@ -37,8 +37,8 @@ sub import {
     }
 }
 
-our %DEFAULTS = ( put => [],
-                  get => [],
+our %DEFAULTS = ( put => [best_effort => 1],
+                  get => [best_effort => 1],
                   ls  => [],
                   new => [] );
 
@@ -101,21 +101,25 @@ sub status {
 }
 
 sub get {
-    croak '$Usage: $sftp->get($local, $remote, $cb)' if @_ < 3 or @_ > 4;
+    croak '$Usage: $sftp->get($local, $remote, $cb)' if @_ < 2 or @_ > 4;
     my ($sftp, $remote, $local, $cb) = @_;
 
     my $save = defined(wantarray);
     my @content;
+    my @cb;
+    if (defined $cb or $save) {
+        @cb = ( callback => sub {
+                    my ($sftp, $data, $off, $size) = @_;
+                    $cb->($sftp, $data, $off, $size) if $cb;
+                    push @content, $data if $save
+                });
+    }
 
     $sftp->SUPER::get($remote, $local,
                       @{$DEFAULTS{get}},
-		      dont_save => !defined($local),
-		      callback => sub {
-			  my ($sftp, $data, $off, $size) = @_;
-			  $cb->($sftp, $data, $off, $size) if $cb;
-			  push @content, $data if $save
-		      } )
-	or return undef;
+                      dont_save => !defined($local),
+                      @cb)
+        or return undef;
 
     if ($save) {
 	return CORE::join('', @content);
@@ -128,7 +132,7 @@ sub put {
 
     $sftp->SUPER::put($local, $remote,
                       @{$DEFAULTS{put}},
-		      (defined $cb ? (callback => $cb) : ()));
+		      callback => $cb);
     $sftp->_warn_error;
     !$sftp->SUPER::error;
 }
