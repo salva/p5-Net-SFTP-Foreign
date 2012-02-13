@@ -4,7 +4,8 @@ Revision history for Net::SFTP::Foreign
         - add put_content method
         - support perm option in mget, mput, rget and rput methods
         - better umask handling, now use an object to reset it at end
-        - of scope.
+          of scope
+        - improve debugging output
 
 1.70_05  Feb 5, 2012
         - on Compat::get $remote argument is optional
