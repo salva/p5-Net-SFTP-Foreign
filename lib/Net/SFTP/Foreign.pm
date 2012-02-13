@@ -171,6 +171,8 @@ sub new {
 
     bless $sftp, $class;
 
+    $debug and _debug "This is Net::SFTP::Foreign $Net::SFTP::Foreign::VERSION running on Perl $^V on $^O, debug set to $debug";
+
     $sftp->_clear_error_and_status;
 
     my $backend = delete $opts{backend};
@@ -185,6 +187,13 @@ sub new {
 	$backend = $backend_class->_new($sftp, \%opts);
     }
     $sftp->{_backend} = $backend;
+
+    if ($debug) {
+        my $class = ref($backend) || $backend;
+        no strict 'refs';
+        my $version = ${$class .'::VERSION'} || 0;
+        _debug "Using backend $class $version";
+    }
 
     my %defs = $backend->_defaults;
 
