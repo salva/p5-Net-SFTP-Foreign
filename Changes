@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.70_06
+1.70_06  Feb 13, 2012
         - add put_content method
         - support perm option in mget, mput, rget and rput methods
         - better umask handling, now use an object to reset it at end
