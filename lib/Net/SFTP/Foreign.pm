@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_06';
+our $VERSION = '1.70_07';
 
 use strict;
 use warnings;
@@ -171,7 +171,13 @@ sub new {
 
     bless $sftp, $class;
 
-    $debug and _debug "This is Net::SFTP::Foreign $Net::SFTP::Foreign::VERSION running on Perl $^V on $^O, debug set to $debug";
+    if ($debug) {
+        _debug "This is Net::SFTP::Foreign $Net::SFTP::Foreign::VERSION";
+        _debug "Loaded from $INC{'Net/SFTP/Foreign.pm'}";
+        _debug "Running on Perl $^V for $^O";
+        _debug "debug set to $debug";
+        _debug "~0 is " . ~0;
+    }
 
     $sftp->_clear_error_and_status;
 
