@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.70_07
+1.70_07  Feb 19, 2012
         - put recovers from open calls failing due to the existence of
           a remote file with the wrong permissions
         - do not use accessors for status and error slot internally
