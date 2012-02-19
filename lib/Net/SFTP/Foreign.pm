@@ -109,7 +109,7 @@ sub _conn_failed {
     $sftp->_conn_lost(SSH2_FX_NO_CONNECTION,
                       SFTP_ERR_CONNECTION_BROKEN,
                       @_)
-	unless $sftp->error;
+	unless $sftp->{_error};
 }
 
 sub _get_msg {
@@ -229,7 +229,7 @@ sub new {
     $backend->_init_transport($sftp, \%opts);
     %opts and _croak_bad_options(keys %opts);
 
-    $sftp->_init unless $sftp->error;
+    $sftp->_init unless $sftp->{_error};
     $backend->_after_init($sftp);
     $sftp
 }
@@ -343,7 +343,7 @@ sub _init {
 			  SFTP_ERR_REMOTE_BAD_MESSAGE,
 			  "bad packet type, expecting SSH2_FXP_VERSION, got $type");
     }
-    elsif ($sftp->status == SSH2_FX_CONNECTION_LOST
+    elsif ($sftp->{_status} == SSH2_FX_CONNECTION_LOST
 	   and $sftp->{_password_authentication}
 	   and $sftp->{_password_sent}) {
 	$sftp->_set_error(SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED,
@@ -520,12 +520,16 @@ sub open {
 				"Couldn't open remote file '$path'");
 
     if ($debug and $debug & 2) {
-        _debug("new remote file '$path' open, rid:");
-        _hexdump($rid);
+        if (defined $rid) {
+            _debug("new remote file '$path' open, rid:");
+            _hexdump($rid);
+        }
+        else {
+            _debug("open failed: $sftp->{_status}");
+        }
     }
 
-    defined $rid
-	or return undef;
+    defined $rid or return undef;
 
     my $fh = Net::SFTP::Foreign::FileHandle->_new_from_rid($sftp, $rid);
     $fh->_flag(append => 1) if ($flags & SSH2_FXF_APPEND);
@@ -1060,7 +1064,7 @@ sub mkpath {
 	    $debug and $debug & 8192 and _debug "$p is a symbolic dir, skipping";
 	    unless ($sftp->test_d($p)) {
 		$debug and $debug & 8192 and _debug "symbolic dir $p can not be checked";
-		$sftp->error or
+		$sftp->{_error} or
 		    $sftp->_set_error(SFTP_ERR_REMOTE_MKDIR_FAILED,
 				      "Unable to make path, bad name");
 		return undef;
@@ -1178,7 +1182,7 @@ sub readdir {
 	    }
 	}
 	else {
-	    $sftp->_set_error if $sftp->status == SSH2_FX_EOF;
+	    $sftp->_set_error if $sftp->{_status} == SSH2_FX_EOF;
 	    last;
 	}
     }
@@ -1268,7 +1272,7 @@ sub rename {
 
     if ($overwrite) {
         $sftp->atomic_rename($old, $new) and return 1;
-        $sftp->status != SSH2_FX_OP_UNSUPPORTED and return undef;
+        $sftp->{_status} != SSH2_FX_OP_UNSUPPORTED and return undef;
     }
 
     for (1) {
@@ -1276,7 +1280,7 @@ sub rename {
         # we are optimistic here and try to rename it without testing
         # if a file of the same name already exists first
         if (!$sftp->_rename($old, $new) and
-            $sftp->status == SSH2_FX_FAILURE) {
+            $sftp->{_status} == SSH2_FX_FAILURE) {
             if ($numbered and $sftp->test_e($new)) {
                 _inc_numbered($new);
                 redo;
@@ -1666,7 +1670,7 @@ sub get {
                       $lstart + $roff + $adjustment_before,
                       $lstart + $size + $adjustment);
 
-                last if $sftp->error;
+                last if $sftp->{_error};
             }
 
             if (length($data) and !$dont_save) {
@@ -1708,7 +1712,7 @@ sub get {
         if (defined $cb) {
             my $data = '';
             $cb->($sftp, $data, $askoff + $adjustment, $size + $adjustment);
-            return undef if $sftp->error;
+            return undef if $sftp->{_error};
             if (length($data) and !$dont_save) {
                 unless (print $fh $data) {
                     $sftp->_set_error(SFTP_ERR_LOCAL_WRITE_FAILED,
@@ -1943,7 +1947,7 @@ sub put {
 	    }
 	}
 	elsif ($append) {
-	    return undef unless $sftp->status == SSH2_FX_NO_SUCH_FILE;
+	    return undef unless $sftp->{_status} == SSH2_FX_NO_SUCH_FILE;
 	    undef $append;
 	}
 
@@ -2053,19 +2057,30 @@ sub put {
                                    SSH2_FXF_WRITE | SSH2_FXF_CREAT | SSH2_FXF_EXCL,
                                    $attrs);
                 last if ($rfh or
-                         $sftp->status != SSH2_FX_FAILURE or
+                         $sftp->{_status} != SSH2_FX_FAILURE or
                          !$sftp->test_e($remote));
                 _inc_numbered($remote);
 	    }
-            $sftp->_ok_or_autodie;
-            $$numbered = $remote if ref $numbered;
+            $$numbered = $remote if $rfh and ref $numbered;
 	}
         else {
-            $rfh = $sftp->open($remote,
-                               SSH2_FXF_WRITE | SSH2_FXF_CREAT |
-                               ($append ? 0 : ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL)),
-                               $attrs)
-                or return undef;
+            # open can fail due to a remote file with the wrong
+            # permissions being already there. We are optimistic here,
+            # first we try to open the remote file and if it fails due
+            # to a permissions error then we remove it and try again.
+            for my $rep (0, 1) {
+                local $sftp->{_autodie};
+                $rfh = $sftp->open($remote,
+                                   SSH2_FXF_WRITE | SSH2_FXF_CREAT |
+                                   ($append ? 0 : ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL)),
+                                   $attrs);
+
+                last if $rfh or $rep or !$overwrite or $sftp->{_status} != SSH2_FX_PERMISSION_DENIED;
+
+                $debug and $debug & 2 and _debug("retrying open after removing remote file");
+                local ($sftp->{_status}, $sftp->{_error});
+                $sftp->remove($remote);
+            }
         }
     }
 
@@ -2152,7 +2167,7 @@ sub put {
                     $lsize = $nextoff if $nextoff > $lsize;
                     $cb->($sftp, $data, $writeoff, $lsize);
 
-                    last OK if $sftp->error;
+                    last OK if $sftp->{_error};
 
                     utf8::downgrade($data, 1) or croak "callback introduced wide characters in data";
 
@@ -2350,7 +2365,7 @@ sub ls {
         }
         $sftp->_closedir_save_status($rdh) if $rdh;
     };
-    unless ($sftp->error) {
+    unless ($sftp->{_error}) {
 	if ($delayed_wanted) {
 	    @dir = grep { $wanted->($sftp, $_) } @dir;
 	    @dir = map { defined $_->{realpath}
@@ -2368,7 +2383,7 @@ sub ls {
         }
 	return \@dir;
     }
-    croak $sftp->error if $sftp->{_autodie};
+    croak $sftp->{_error} if $sftp->{_autodie};
     return undef;
 }
 
@@ -2504,8 +2519,8 @@ sub put_symlink {
     while (1) {
         local $sftp->{_autodie};
         $sftp->symlink($remote, $target);
-        if ($sftp->error and
-            $sftp->status == SSH2_FX_FAILURE) {
+        if ($sftp->{_error} and
+            $sftp->{_status} == SSH2_FX_FAILURE) {
             if ($numbered and $sftp->test_e($remote)) {
                 _inc_numbered($remote);
                 redo;
@@ -2861,7 +2876,7 @@ sub mget {
 		$sftp->get($fn, $local, %get_opts);
 	    }
 	}
-	$count++ unless $sftp->error;
+	$count++ unless $sftp->{_error};
 	$sftp->_call_on_error($on_error, $e);
     }
     $count;
@@ -2917,7 +2932,7 @@ sub mput {
 		$sftp->put($fn, $remote, %put_opts);
 	    }
 	}
-	$count++ unless $sftp->error;
+	$count++ unless $sftp->{_error};
 	$sftp->_call_on_error($on_error, $e);
     } 
     $count;
