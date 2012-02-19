@@ -18,7 +18,7 @@ require Net::SFTP::Foreign::Backend::Unix;
 our @ISA = qw(Net::SFTP::Foreign::Backend::Unix);
 
 sub _defaults {
-    ( default_queue_size => 4 )
+    ( queue_size => 16 )
 }
 
 sub _init_transport_streams {

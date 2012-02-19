@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.70_08  Feb 19, 2012
+        - queue_size defaults per backend were using the wrong key
+          name and so being ignored. That was causing connection
+          stalled on Windows with the default backend.
+
 1.70_07  Feb 19, 2012
         - put recovers from open calls failing due to the existence of
           a remote file with the wrong permissions

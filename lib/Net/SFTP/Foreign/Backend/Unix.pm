@@ -18,7 +18,7 @@ use Time::HiRes qw(sleep time);
 sub _new { shift }
 
 sub _defaults {
-   ( default_queue_size => 32 )
+   ( queue_size => 32 )
 }
 
 sub _init_transport_streams {
