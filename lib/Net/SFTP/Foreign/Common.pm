@@ -403,14 +403,29 @@ sub glob {
 
 sub test_d {
     my ($sftp, $name) = @_;
-    my $a = $sftp->stat($name);
-    $a ? _is_dir($a->perm) : undef;
+    {
+        local $sftp->{_autodie};
+        my $a = $sftp->stat($name);
+        return _is_dir($a->perm) if $a;
+    }
+    if ($sftp->{_status} == SSH2_FX_NO_SUCH_FILE) {
+        $sftp->_clear_error_and_status;
+        return undef;
+    }
+    $sftp->_ok_or_autodie;
 }
 
 sub test_e {
     my ($sftp, $name) = @_;
-    local ($sftp->{_error}, $sftp->{_status}, $sftp->{_autodie});
-    !!$sftp->stat($name)
+    {
+        local $sftp->{_autodie};
+        $sftp->stat($name) and return 1;
+    }
+    if ($sftp->{_status} == SSH2_FX_NO_SUCH_FILE) {
+        $sftp->_clear_error_and_status;
+        return undef;
+    }
+    $sftp->_ok_or_autodie;
 }
 
 1;
