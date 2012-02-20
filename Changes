@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.70_09
+        - better put method debugging
+
 1.70_08  Feb 19, 2012
         - queue_size defaults per backend were using the wrong key
           name and so being ignored. That was causing connection

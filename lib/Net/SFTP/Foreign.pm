@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_08';
+our $VERSION = '1.70_09';
 
 use strict;
 use warnings;
@@ -1906,11 +1906,13 @@ sub put {
 		CORE::stat $fh;
 	    }
 	   ) {
+            $debug and $debug & 16384 and _debug "local file size is " . (defined $lsize ? $lsize : '<undef>');
+
 	    # $fh can point at some place inside the file, not just at the
 	    # begining
 	    if ($local_is_fh and defined $lsize) {
 		my $tell = eval { CORE::tell $fh };
-		$lsize -= $tell if ($tell and $tell > 0);
+		$lsize -= $tell if $tell and $tell > 0;
 	    }
 	}
 	elsif ($copy_perm or $copy_time) {
