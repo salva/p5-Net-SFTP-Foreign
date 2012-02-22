@@ -2740,10 +2740,10 @@ sub rput {
 		    # print "descend: $e->{filename}\n";
 		    if (!$wanted or $wanted->($lfs, $e)) {
 			my $fn = $e->{filename};
-			$debug and $debug and 32768 and _debug "rput handling $fn";
+			$debug and $debug & 32768 and _debug "rput handling $fn";
 			if ($fn =~ $relocal) {
 			    my $rpath = $sftp->join($remote, File::Spec->splitdir($1));
-			    $debug and $debug and 32768 and _debug "rpath: $rpath";
+			    $debug and $debug & 32768 and _debug "rpath: $rpath";
 			    if ($sftp->test_d($rpath)) {
 				$lfs->_set_error(SFTP_ERR_REMOTE_ALREADY_EXISTS,
 						 "Remote directory '$rpath' already exists");
@@ -2776,7 +2776,7 @@ sub rput {
 		    unless (_is_dir($e->{a}->perm)) {
 			if (!$wanted or $wanted->($lfs, $e)) {
 			    my $fn = $e->{filename};
-			    $debug and $debug and 32768 and _debug "rput handling $fn";
+			    $debug and $debug & 32768 and _debug "rput handling $fn";
 			    if ($fn =~ $relocal) {
 				my (undef, $d, $f) = File::Spec->splitpath($1);
 				my $rpath = $sftp->join($remote, File::Spec->splitdir($d), $f);
