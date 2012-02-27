@@ -133,7 +133,8 @@ sub _best_effort {
     my $best_effort = shift;
     my $method = shift;
     local ($sftp->{_error}, $sftp->{_autodie}) if $best_effort;
-    $sftp->$method(@_) || 1;
+    $sftp->$method(@_);
+    return (($best_effort or not $sftp->{_error}) ? 1 : undef);
 }
 
 sub _call_on_error {
