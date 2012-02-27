@@ -10,8 +10,7 @@ TODO
 
 - add support for process filters on put/get operations
 
-- make setstat failures optionally non fatal inside put method
-  (relaxed)
+- implement save_status methods as a wrapper like best_effort
 
 DONE
 ==== 
@@ -29,4 +28,7 @@ DONE
   as much as possible fron Net::OpenSSH
 
 - detect unknown host key checking
+
+- make setstat failures optionally non fatal inside put method
+  (relaxed)
 

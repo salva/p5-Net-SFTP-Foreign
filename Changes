@@ -1,6 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
 1.70_09
+        - solve bad interaction between autodie, resume and append
+        - best_effort wrapped methods were not failing ever
+        - minor put method refactoring
+        - save globals on destructor entry
         - better put method debugging
 
 1.70_08  Feb 19, 2012
