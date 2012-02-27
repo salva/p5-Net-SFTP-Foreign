@@ -1934,9 +1934,13 @@ sub put {
     my $writeoff = 0;
     my $converter = _gen_converter $conversion;
     my $converted_input = '';
+    my $rattrs;
 
     if ($resume or $append) {
-	my $rattrs = $sftp->stat($remote);
+	$rattrs = do {
+            local $sftp->{_autodie};
+            $sftp->stat($remote);
+        };
 	if ($rattrs) {
 	    if ($resume and $resume eq 'auto' and $rattrs->mtime >= $lmtime) {
                 $debug and $debug & 16384 and
@@ -1948,12 +1952,21 @@ sub put {
 		$debug and $debug & 16384 and _debug "resuming from $writeoff";
 	    }
 	}
-	elsif ($append) {
-	    return undef unless $sftp->{_status} == SSH2_FX_NO_SUCH_FILE;
-	    undef $append;
-	}
+        else {
+            if ($append) {
+                $sftp->{_status} == SSH2_FX_NO_SUCH_FILE
+                    or $sftp->_ok_or_autodie or return undef;
+                # no such file, no append
+                undef $append;
+            }
+            $sftp->_clear_error_and_status;
+        }
+    }
 
-	if ($resume and $writeoff) {
+    my ($atomic_numbered, $atomic_remote);
+    if ($writeoff) {
+        # one of $resume or $append is set
+        if ($resume) {
             $debug and $debug & 16384 and _debug "resuming file transfer from $writeoff";
             if ($converter) {
                 # as size could change, we have to read and convert
@@ -1984,32 +1997,32 @@ sub put {
                         }
                         $lsize += $converter->($converted_input) if defined $lsize;
                         utf8::downgrade($converted_input, 1)
-				or croak "converter introduced wide characters in data";
+                                or croak "converter introduced wide characters in data";
                         $read or $eof_t = 1;
                     }
                 }
             }
-	    elsif ($local_is_fh) {
-		# as some PerlIO layer could be installed on the $fh,
-		# just seeking to the resume position will not be
-		# enough. We have to read and discard data until the
-		# desired offset is reached
-		my $off = $writeoff;
-		while ($off) {
-		    my $read = CORE::read($fh, my($buf), ($off < 16384 ? $off : 16384));
-		    if ($read) {
+            elsif ($local_is_fh) {
+                # as some PerlIO layer could be installed on the $fh,
+                # just seeking to the resume position will not be
+                # enough. We have to read and discard data until the
+                # desired offset is reached
+                my $off = $writeoff;
+                while ($off) {
+                    my $read = CORE::read($fh, my($buf), ($off < 16384 ? $off : 16384));
+                    if ($read) {
                         $debug and $debug & 16384 and _debug "discarding $read bytes";
-			$off -= $read;
-		    }
-		    else {
-			$sftp->_set_error(defined $read
-					  ? ( SFTP_ERR_REMOTE_BIGGER_THAN_LOCAL,
-					      "Couldn't resume transfer, remote file is bigger than local")
-					  : ( SFTP_ERR_LOCAL_READ_ERROR,
-					      "Couldn't read from local file handler '$local' to the resume point $writeoff", $!));
-		    }
-		}
-	    }
+                        $off -= $read;
+                    }
+                    else {
+                        $sftp->_set_error(defined $read
+                                          ? ( SFTP_ERR_REMOTE_BIGGER_THAN_LOCAL,
+                                              "Couldn't resume transfer, remote file is bigger than local")
+                                          : ( SFTP_ERR_LOCAL_READ_ERROR,
+                                              "Couldn't read from local file handler '$local' to the resume point $writeoff", $!));
+                    }
+                }
+            }
             else {
                 if (defined $lsize and $writeoff > $lsize) {
                     $sftp->_set_error(SFTP_ERR_REMOTE_BIGGER_THAN_LOCAL,
@@ -2024,18 +2037,16 @@ sub put {
             }
             if (defined $lsize and $writeoff == $lsize) {
                 if (defined $perm and $rattrs->perm != $perm) {
+                    # FIXME: do copy_time here if required
                     return $sftp->_best_effort($best_effort, setstat => $remote, $attrs);
                 }
                 return 1;
             }
-            $rfh = $sftp->open($remote, SSH2_FXF_WRITE)
-                or return undef;
         }
+        $rfh = $sftp->open($remote, SSH2_FXF_WRITE)
+            or return undef;
     }
-
-    my ($atomic_numbered, $atomic_remote);
-
-    unless (defined $rfh) {
+    else {
         if ($atomic) {
             # check that does not exist a file of the same name that
             # would block the rename operation at the end
@@ -2052,9 +2063,9 @@ sub put {
             $numbered = 1;
             $debug and $debug & 128 and _debug("temporal remote file name: $remote");
         }
+        local $sftp->{_autodie};
 	if ($numbered) {
             while (1) {
-                local $sftp->{_autodie};
                 $rfh = $sftp->open($remote,
                                    SSH2_FXF_WRITE | SSH2_FXF_CREAT | SSH2_FXF_EXCL,
                                    $attrs);
@@ -2071,10 +2082,9 @@ sub put {
             # first we try to open the remote file and if it fails due
             # to a permissions error then we remove it and try again.
             for my $rep (0, 1) {
-                local $sftp->{_autodie};
                 $rfh = $sftp->open($remote,
                                    SSH2_FXF_WRITE | SSH2_FXF_CREAT |
-                                   ($append ? 0 : ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL)),
+                                   ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL),
                                    $attrs);
 
                 last if $rfh or $rep or !$overwrite or $sftp->{_status} != SSH2_FX_PERMISSION_DENIED;
@@ -3216,11 +3226,10 @@ sub OPEN {
 }
 
 sub DESTROY {
+    local ($@, $!, $?);
     my $self = shift;
     my $sftp = $self->_sftp;
-
-    $debug and $debug & 4 and Net::SFTP::Foreign::_debug("$self->DESTROY called (sftp: ".($sftp||'').")");
-
+    $debug and $debug & 4 and Net::SFTP::Foreign::_debug("$self->DESTROY called (sftp: ".($sftp||'<undef>').")");
     if ($self->_check and $sftp) {
         local $sftp->{_autodie};
 	$sftp->_close_save_status($self)
@@ -3257,6 +3266,7 @@ sub OPENDIR {
 *SEEKDIR = $gen_not_supported->();
 
 sub DESTROY {
+    local ($@, $!, $?);
     my $self = shift;
     my $sftp = $self->_sftp;
 
