@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_09';
+our $VERSION = '1.70_10';
 
 use strict;
 use warnings;
@@ -1418,8 +1418,6 @@ sub get {
     my $atomic = delete $opts{atomic};
     my $best_effort = delete $opts{best_effort};
 
-    croak "'perm' and 'umask' options can not be used simultaneously"
-	if (defined $perm and defined $umask);
     croak "'perm' and 'copy_perm' options can not be used simultaneously"
 	if (defined $perm and defined $copy_perm);
     croak "'resume' and 'append' options can not be used simultaneously"
@@ -1441,12 +1439,6 @@ sub get {
     if ($resume and $conversion) {
         carp "resume option is useless when data conversion has also been requested";
         undef $resume;
-    }
-
-    my $neg_umask;
-    unless (defined $perm) {
-	$umask = umask unless defined $umask;
-	$neg_umask = 0777 & ~$umask;
     }
 
     $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
@@ -1472,9 +1464,10 @@ sub get {
         }
     }
 
+    $umask = (defined $perm ? 0 : umask) unless defined $umask;
     if ($copy_perm) {
         if (defined $rperm) {
-            $perm = $rperm & $neg_umask;
+            $perm = $rperm;
         }
         elsif ($best_effort) {
             undef $copy_perm
@@ -1485,6 +1478,8 @@ sub get {
             return undef
         }
     }
+    $perm &= ~$umask if defined $perm;
+
     $sftp->_clear_error_and_status;
 
     if ($resume and $resume eq 'auto') {
@@ -1563,8 +1558,8 @@ sub get {
                 $flags |= Fcntl::O_EXCL if ($numbered or (!$overwrite and !$append));
                 unlink $local if $overwrite;
                 while (1) {
-                    my $open_perm = (defined $perm ? $perm : $neg_umask & 0666);
-                    my $save = _umask_save_and_set(~$open_perm & 0777);
+                    my $open_perm = (defined $perm ? $perm : 0666);
+                    my $save = _umask_save_and_set($umask);
                     sysopen ($fh, $local, $flags, $open_perm) and last;
                     unless ($numbered and -e $local) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
@@ -1583,7 +1578,7 @@ sub get {
             my $error;
 	    do {
                 local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-                unless (eval { chmod($perm & $neg_umask, $local) > 0 }) {
+                unless (eval { chmod($perm, $local) > 0 }) {
                     $error = ($@ ? $@ : $!);
                 }
             };
@@ -3753,11 +3748,11 @@ file. Default is to copy them after applying the local process umask.
 
 allows one to select the umask to apply when setting the permissions
 of the copied file. Default is to use the umask for the current
-process.
+process or C<0> if the C<perm> option is algo used.
 
 =item perm =E<gt> $perm
 
-sets the permision mask of the file to be $perm, umask and remote
+sets the permision mask of the file to be $perm, remote
 permissions are ignored.
 
 =item resume =E<gt> 1 | 'auto'
