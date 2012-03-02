@@ -1444,10 +1444,7 @@ sub get {
     }
 
     my $neg_umask;
-    if (defined $perm) {
-	$neg_umask = $perm;
-    }
-    else {
+    unless (defined $perm) {
 	$umask = umask unless defined $umask;
 	$neg_umask = 0777 & ~$umask;
     }
@@ -1477,7 +1474,7 @@ sub get {
 
     if ($copy_perm) {
         if (defined $rperm) {
-            $perm = $rperm;
+            $perm = $rperm & $neg_umask;
         }
         elsif ($best_effort) {
             undef $copy_perm
@@ -1526,8 +1523,6 @@ sub get {
             $debug and $debug & 128 and _debug("temporal local file name: $local");
         }
 
-        $perm = (0666 & $neg_umask) unless defined $perm or $local_is_fh;
-
         if ($resume) {
             if (CORE::open $fh, '+<', $local) {
                 binmode $fh;
@@ -1566,14 +1561,11 @@ sub get {
                 my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
                 $flags |= Fcntl::O_APPEND if $append;
                 $flags |= Fcntl::O_EXCL if ($numbered or (!$overwrite and !$append));
-
-                my $lumask = ~$perm & 0777;
-
-                unlink $local if ($overwrite and !$numbered);
-
+                unlink $local if $overwrite;
                 while (1) {
-                    my $save = _umask_save_and_set $lumask;
-                    sysopen ($fh, $local, $flags, $perm) and last;
+                    my $open_perm = (defined $perm ? $perm : $neg_umask & 0666);
+                    my $save = _umask_save_and_set(~$open_perm & 0777);
+                    sysopen ($fh, $local, $flags, $open_perm) and last;
                     unless ($numbered and -e $local) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
                                           "Can't open $local", $!);
@@ -1588,13 +1580,17 @@ sub get {
 	}
 
 	if (defined $perm) {
-	    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-	    my $e = eval { chmod($perm & $neg_umask, $local) };
-	    if ($@ or $e <= 0) {
-                my $err = $!;
-                unlink $local;
+            my $error;
+	    do {
+                local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+                unless (eval { chmod($perm & $neg_umask, $local) > 0 }) {
+                    $error = ($@ ? $@ : $!);
+                }
+            };
+	    if ($error and !$best_effort) {
+                unlink $local unless $resume or $append;
 		$sftp->_set_error(SFTP_ERR_LOCAL_CHMOD_FAILED,
-				  "Can't chmod $local", ($@ ? $@ : $err));
+				  "Can't chmod $local", $error);
 		return undef
 	    }
 	}
