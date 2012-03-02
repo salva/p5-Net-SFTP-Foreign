@@ -1735,61 +1735,59 @@ sub get {
                     goto CLEANUP;
                 }
             }
-        }
 
-        if ($atomic) {
-            if (!$overwrite) {
-                while (1) {
-                    # performing a non-overwriting atomic rename is
-                    # quite burdensome: first, link is tried, if that
-                    # fails, non-overwriting is favoured over
-                    # atomicity and an empty file is used to lock the
-                    # path before atempting an overwriting rename.
-                    if (link $local, $atomic_local) {
-                        unlink $local;
-                        last;
-                    }
-                    my $err = $!;
-                    unless (-e $atomic_local) {
-                        if (sysopen my $lock, $atomic_local,
-                            Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY,
-                            0600) {
-                            $atomic_cleanup = 1;
-                            goto OVERWRITE;
+            if ($atomic) {
+                if (!$overwrite) {
+                    while (1) {
+                        # performing a non-overwriting atomic rename is
+                        # quite burdensome: first, link is tried, if that
+                        # fails, non-overwriting is favoured over
+                        # atomicity and an empty file is used to lock the
+                        # path before atempting an overwriting rename.
+                        if (link $local, $atomic_local) {
+                            unlink $local;
+                            last;
                         }
-                        $err = $!;
+                        my $err = $!;
                         unless (-e $atomic_local) {
-                            $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
-                                              "Can't open $local", $err);
+                            if (sysopen my $lock, $atomic_local,
+                                Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY,
+                                0600) {
+                                $atomic_cleanup = 1;
+                                goto OVERWRITE;
+                            }
+                            $err = $!;
+                            unless (-e $atomic_local) {
+                                $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
+                                                  "Can't open $local", $err);
+                                goto CLEANUP;
+                            }
+                        }
+                        unless ($numbered) {
+                            $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+                                              "local file $atomic_local already exists");
                             goto CLEANUP;
                         }
+                        _inc_numbered($atomic_local);
                     }
-                    unless ($numbered) {
-                        $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
-                                          "local file $atomic_local already exists");
+                }
+                else {
+                OVERWRITE:
+                    unless (CORE::rename $local, $atomic_local) {
+                        $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
+                                          "Unable to rename temporal file to its final position '$atomic_local'", $!);
                         goto CLEANUP;
                     }
-                    _inc_numbered($atomic_local);
                 }
+                $$atomic_numbered = $local if ref $atomic_numbered;
             }
-            else {
-            OVERWRITE:
-                unless (CORE::rename $local, $atomic_local) {
-                    $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
-                                      "Unable to rename temporal file to its final position '$atomic_local'", $!);
 
-                    goto CLEANUP;
-                }
+        CLEANUP:
+            if ($cleanup and $sftp->{_error}) {
+                unlink $local;
+                unlink $atomic_local if $atomic_cleanup;
             }
-            $$atomic_numbered = $local if ref $atomic_numbered;
         }
-
-    CLEANUP:
-        if ($cleanup and $sftp->{_error}) {
-            unlink $local;
-            unlink $atomic_local if $atomic_cleanup;
-        }
-
     }; # autodie flag is restored here!
 
     $sftp->_ok_or_autodie;

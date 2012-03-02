@@ -1,6 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
 1.70_09
+        - autodie was no working for chmod errors on get
+        - get was unlinking the file when chmod failed even whith
+          append or resume set
+        - get was failing when chmod failed even if copy_perms was
+          dissabled (bug report by Rich Anderson)
         - solve bad interaction between autodie, resume and append
         - best_effort wrapped methods were not failing ever
         - minor put method refactoring
