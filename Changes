@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.70_09
+1.70_09  Mar 2, 2012
         - autodie was no working for chmod errors on get
         - get was unlinking the file when chmod failed even whith
           append or resume set
