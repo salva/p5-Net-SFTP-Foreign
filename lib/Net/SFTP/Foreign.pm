@@ -334,6 +334,15 @@ sub _init {
                 my $key = $msg->get_str;
                 my $value = $msg->get_str;
                 $sftp->{server_extensions}{$key} = $value;
+
+                if ($key eq 'vendor-id') {
+                    my $vid = Net::SFTP::Foreign::Buffer->make("$value");
+                    $sftp->{_ext__vendor_id} = [ Encode::decode(utf8 => $vid->get_str),
+                                                 Encode::decode(utf8 => $vid->get_str),
+                                                 Encode::decode(utf8 => $vid->get_str),
+                                                 $vid->get_int64 ];
+                }
+
             }
 
 	    return $version;
