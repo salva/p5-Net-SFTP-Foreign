@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.70_09';
+our $VERSION = '1.71';
 
 use strict;
 use warnings;
@@ -1427,8 +1427,6 @@ sub get {
     my $atomic = delete $opts{atomic};
     my $best_effort = delete $opts{best_effort};
 
-    croak "'perm' and 'umask' options can not be used simultaneously"
-	if (defined $perm and defined $umask);
     croak "'perm' and 'copy_perm' options can not be used simultaneously"
 	if (defined $perm and defined $copy_perm);
     croak "'resume' and 'append' options can not be used simultaneously"
@@ -1450,15 +1448,6 @@ sub get {
     if ($resume and $conversion) {
         carp "resume option is useless when data conversion has also been requested";
         undef $resume;
-    }
-
-    my $neg_umask;
-    if (defined $perm) {
-	$neg_umask = $perm;
-    }
-    else {
-	$umask = umask unless defined $umask;
-	$neg_umask = 0777 & ~$umask;
     }
 
     $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
@@ -1484,6 +1473,7 @@ sub get {
         }
     }
 
+    $umask = (defined $perm ? 0 : umask) unless defined $umask;
     if ($copy_perm) {
         if (defined $rperm) {
             $perm = $rperm;
@@ -1497,6 +1487,8 @@ sub get {
             return undef
         }
     }
+    $perm &= ~$umask if defined $perm;
+
     $sftp->_clear_error_and_status;
 
     if ($resume and $resume eq 'auto') {
@@ -1534,8 +1526,6 @@ sub get {
             $numbered = 1;
             $debug and $debug & 128 and _debug("temporal local file name: $local");
         }
-
-        $perm = (0666 & $neg_umask) unless defined $perm or $local_is_fh;
 
         if ($resume) {
             if (CORE::open $fh, '+<', $local) {
@@ -1575,14 +1565,11 @@ sub get {
                 my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
                 $flags |= Fcntl::O_APPEND if $append;
                 $flags |= Fcntl::O_EXCL if ($numbered or (!$overwrite and !$append));
-
-                my $lumask = ~$perm & 0777;
-
-                unlink $local if ($overwrite and !$numbered);
-
+                unlink $local if $overwrite;
                 while (1) {
-                    my $save = _umask_save_and_set $lumask;
-                    sysopen ($fh, $local, $flags, $perm) and last;
+                    my $open_perm = (defined $perm ? $perm : 0666);
+                    my $save = _umask_save_and_set($umask);
+                    sysopen ($fh, $local, $flags, $open_perm) and last;
                     unless ($numbered and -e $local) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
                                           "Can't open $local", $!);
@@ -1597,13 +1584,17 @@ sub get {
 	}
 
 	if (defined $perm) {
-	    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-	    my $e = eval { chmod($perm & $neg_umask, $local) };
-	    if ($@ or $e <= 0) {
-                my $err = $!;
-                unlink $local;
+            my $error;
+	    do {
+                local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+                unless (eval { chmod($perm, $local) > 0 }) {
+                    $error = ($@ ? $@ : $!);
+                }
+            };
+	    if ($error and !$best_effort) {
+                unlink $local unless $resume or $append;
 		$sftp->_set_error(SFTP_ERR_LOCAL_CHMOD_FAILED,
-				  "Can't chmod $local", ($@ ? $@ : $err));
+				  "Can't chmod $local", $error);
 		return undef
 	    }
 	}
@@ -1748,61 +1739,59 @@ sub get {
                     goto CLEANUP;
                 }
             }
-        }
 
-        if ($atomic) {
-            if (!$overwrite) {
-                while (1) {
-                    # performing a non-overwriting atomic rename is
-                    # quite burdensome: first, link is tried, if that
-                    # fails, non-overwriting is favoured over
-                    # atomicity and an empty file is used to lock the
-                    # path before atempting an overwriting rename.
-                    if (link $local, $atomic_local) {
-                        unlink $local;
-                        last;
-                    }
-                    my $err = $!;
-                    unless (-e $atomic_local) {
-                        if (sysopen my $lock, $atomic_local,
-                            Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY,
-                            0600) {
-                            $atomic_cleanup = 1;
-                            goto OVERWRITE;
+            if ($atomic) {
+                if (!$overwrite) {
+                    while (1) {
+                        # performing a non-overwriting atomic rename is
+                        # quite burdensome: first, link is tried, if that
+                        # fails, non-overwriting is favoured over
+                        # atomicity and an empty file is used to lock the
+                        # path before atempting an overwriting rename.
+                        if (link $local, $atomic_local) {
+                            unlink $local;
+                            last;
                         }
-                        $err = $!;
+                        my $err = $!;
                         unless (-e $atomic_local) {
-                            $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
-                                              "Can't open $local", $err);
+                            if (sysopen my $lock, $atomic_local,
+                                Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY,
+                                0600) {
+                                $atomic_cleanup = 1;
+                                goto OVERWRITE;
+                            }
+                            $err = $!;
+                            unless (-e $atomic_local) {
+                                $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
+                                                  "Can't open $local", $err);
+                                goto CLEANUP;
+                            }
+                        }
+                        unless ($numbered) {
+                            $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
+                                              "local file $atomic_local already exists");
                             goto CLEANUP;
                         }
+                        _inc_numbered($atomic_local);
                     }
-                    unless ($numbered) {
-                        $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
-                                          "local file $atomic_local already exists");
+                }
+                else {
+                OVERWRITE:
+                    unless (CORE::rename $local, $atomic_local) {
+                        $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
+                                          "Unable to rename temporal file to its final position '$atomic_local'", $!);
                         goto CLEANUP;
                     }
-                    _inc_numbered($atomic_local);
                 }
+                $$atomic_numbered = $local if ref $atomic_numbered;
             }
-            else {
-            OVERWRITE:
-                unless (CORE::rename $local, $atomic_local) {
-                    $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
-                                      "Unable to rename temporal file to its final position '$atomic_local'", $!);
 
-                    goto CLEANUP;
-                }
+        CLEANUP:
+            if ($cleanup and $sftp->{_error}) {
+                unlink $local;
+                unlink $atomic_local if $atomic_cleanup;
             }
-            $$atomic_numbered = $local if ref $atomic_numbered;
         }
-
-    CLEANUP:
-        if ($cleanup and $sftp->{_error}) {
-            unlink $local;
-            unlink $atomic_local if $atomic_cleanup;
-        }
-
     }; # autodie flag is restored here!
 
     $sftp->_ok_or_autodie;
@@ -3768,11 +3757,11 @@ file. Default is to copy them after applying the local process umask.
 
 allows one to select the umask to apply when setting the permissions
 of the copied file. Default is to use the umask for the current
-process.
+process or C<0> if the C<perm> option is algo used.
 
 =item perm =E<gt> $perm
 
-sets the permision mask of the file to be $perm, umask and remote
+sets the permision mask of the file to be $perm, remote
 permissions are ignored.
 
 =item resume =E<gt> 1 | 'auto'
