@@ -65,14 +65,15 @@ sub _queue_msg {
     return $id;
 }
 
-my %buffer_packer_sub =   ( uint8  => \&_buf_push_uint8,
-                            uint32 => \&_buf_push_uint32,
-                            uint64 => \&_buf_push_uint64,
-                            str    => \&_buf_push_str,
-                            utf8   => \&_buf_push_uint8 );
+my %buffer_packer_sub =   ( uint8     => \&_buf_push_uint8,
+                            uint32    => \&_buf_push_uint32,
+                            uint64    => \&_buf_push_uint64,
+                            str       => \&_buf_push_str,
+                            utf8      => \&_buf_push_uint8 );
 
-my %buffer_packer_method = ( path  => '_buf_push_path',
-                             attrs => '_buf_push_attrs' );
+my %buffer_packer_method = ( abs_path => '_buf_push_abs_path',
+                             path     => '_buf_push_path',
+                             attrs    => '_buf_push_attrs' );
 
 sub _queue_msg_low {
     my $sftp = shift;
@@ -143,6 +144,12 @@ sub _buf_push_attrs {
 sub _buf_push_path {
     my $sftp = shift;
     _buf_push_str($_[0], Encode::encode($sftp->{_fs_encoding}, $_[1]));
+}
+
+sub _buf_push_abs_path {
+    my $sftp = shift;
+    _buf_push_str($_[0], Encode::encode($sftp->{_fs_encoding},
+                                        $sftp->_rel2abs($_[1])));
 }
 
 sub _do_io { $_[0]->{_backend}->_do_io(@_) }
@@ -506,7 +513,7 @@ sub _queue_str_request { $_[0]->_queue_msg($_[1], str => $_[2]) }
 
 sub _queue_path_request {
     my($sftp, $code, $path, $attrs) = @_;
-    $sftp->_queue_msg($code, path => $path,
+    $sftp->_queue_msg($code, abs_path => $path,
                       (@_ == 4 ? (attrs => $attrs) : ()));
 }
 
@@ -564,10 +571,9 @@ sub open {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $flags, $a) = @_;
-    $path = $sftp->_rel2abs($path);
     defined $flags or $flags = SSH2_FXF_READ;
     my $id = $sftp->_queue_msg(SSH2_FXP_OPEN,
-                               path => $path, uint32 => $flags, attrs => $a);
+                               abs_path => $path, uint32 => $flags, attrs => $a);
 
     my $rid = $sftp->_get_handle($id,
 				SFTP_ERR_REMOTE_OPEN_FAILED,
@@ -596,9 +602,7 @@ sub opendir {
     @_ == 2 or croak 'Usage: $sftp->opendir($path)';
     ${^TAINT} and &_catch_tainted_args;
 
-    my $sftp = shift;
-    my $path = shift;
-    $path = $sftp->_rel2abs($path);
+    my ($sftp, $path) = @_;
     my $id = $sftp->_queue_path_request(SSH2_FXP_OPENDIR, $path);
     my $rid = $sftp->_get_handle($id, SFTP_ERR_REMOTE_OPENDIR_FAILED,
 				 "Couldn't open remote dir '$path'");
@@ -1041,7 +1045,6 @@ sub _gen_stat_method {
         ${^TAINT} and &_catch_tainted_args;
 
 	my ($sftp, $path) = @_;
-        $path = $sftp->_rel2abs($path);
 	my $id = $sftp->_queue_path_request($code, $path);
 	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
 						$error, $errstr)) {
@@ -1087,7 +1090,6 @@ sub _gen_remove_method {
         ${^TAINT} and &_catch_tainted_args;
 
         my ($sftp, $path) = @_;
-        $path = $sftp->_rel2abs($path);
         my $id = $sftp->_queue_path_request($code, $path);
         $sftp->_check_status_ok($id, $error, $errstr);
     };
@@ -1111,7 +1113,6 @@ sub mkdir {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $attrs) = @_;
-    $path = $sftp->_rel2abs($path);
     my $id = $sftp->_queue_path_request(SSH2_FXP_MKDIR, $path, $attrs);
     $sftp->_check_status_ok($id,
                             SFTP_ERR_REMOTE_MKDIR_FAILED,
@@ -1202,7 +1203,6 @@ sub setstat {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $attrs) = @_;
-    $path = $sftp->_rel2abs($path);
     my $id = $sftp->_queue_path_request(SSH2_FXP_SETSTAT, $path, $attrs);
     $sftp->_check_status_ok($id,
                             SFTP_ERR_REMOTE_SETSTAT_FAILED,
@@ -1337,7 +1337,6 @@ sub _gen_getpath_method {
         ${^TAINT} and &_catch_tainted_args;
 
 	my ($sftp, $path) = @_;
-	$path = $sftp->_rel2abs($path);
 	my $id = $sftp->_queue_path_request($code, $path);
 	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
 						$error,
@@ -1367,13 +1366,9 @@ sub _gen_getpath_method {
 
 sub _rename {
     my ($sftp, $old, $new) = @_;
-
-    $old = $sftp->_rel2abs($old);
-    $new = $sftp->_rel2abs($new);
-
     my $id = $sftp->_queue_msg(SSH2_FXP_RENAME,
-                               path => $old,
-                               path => $new);
+                               abs_path => $old,
+                               abs_path => $new);
 
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
@@ -1433,13 +1428,10 @@ sub atomic_rename {
                             "atomic rename failed")
         or return undef;
 
-    $old = $sftp->_rel2abs($old);
-    $new = $sftp->_rel2abs($new);
-
     my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
                                str => 'posix-rename@openssh.com',
-                               path => $old,
-                               path => $new);
+                               abs_path => $old,
+                               abs_path => $new);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
 }
@@ -1451,10 +1443,9 @@ sub symlink {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $sl, $target) = @_;
-    $sl = $sftp->_rel2abs($sl);
     my $id = $sftp->_queue_msg(SSH2_FXP_SYMLINK,
                                path => $target,
-                               path => $sl);
+                               abs_path => $sl);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_SYMLINK_FAILED,
                             "Couldn't create symlink '$sl' pointing to '$target'");
 }
@@ -1469,13 +1460,11 @@ sub hardlink {
                             SFTP_ERR_REMOTE_HARDLINK_FAILED,
                             "hardlink failed")
         or return undef;
-    $hl = $sftp->_rel2abs($hl);
-    $target = $sftp->_rel2abs($target);
 
     my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
                                str => 'hardlink@openssh.com',
-                               path => $target,
-                               path => $hl);
+                               abs_path => $target,
+                               abs_path => $hl);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_HARDLINK_FAILED,
                             "Couldn't create hardlink '$hl' pointing to '$target'");
 }
@@ -1913,9 +1902,6 @@ sub get_content {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $name) = @_;
-    $name = $sftp->_rel2abs($name);
-    my @data;
-
     my $rfh = $sftp->open($name)
 	or return undef;
 
@@ -3080,10 +3066,9 @@ sub statvfs {
                             "statvfs failed")
         or return undef;
 
-    $path = $sftp->_rel2abs($path);
     my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
                                str => 'statvfs@openssh.com',
-                               path => $path);
+                               abs_path => $path);
     $sftp->_get_statvfs($id,
                         SFTP_ERR_REMOTE_STATVFS_FAILED,
                         "Couldn't stat remote file system");
