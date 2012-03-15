@@ -294,17 +294,16 @@ sub disconnect {
     my $sftp = shift;
     my $pid = $sftp->{pid};
 
-    $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'').")");
+    $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'<undef>').")");
 
-    local ($sftp->{_autodie});
+    local $sftp->{_autodie};
     $sftp->_conn_lost;
 
     if (defined $pid) {
-        local ($!, $?, $@, $SIG{__DIE__}, $SIG{__WARN__}, $SIG{ALRM});
-
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
 
+        local ($?, $@, $SIG{__DIE__}, $SIG{__WARN__}, $SIG{ALRM});
         if ($windows) {
 	    kill KILL => $pid
                 and waitpid($pid, 0);
@@ -342,11 +341,9 @@ sub disconnect {
 
 sub DESTROY {
     my $sftp = shift;
-    local ($?, $!, $@, $sftp->{_autodie});
+    local ($?, $!, $@);
     my $dbpid = $sftp->{_disconnect_by_pid};
-
     $debug and $debug & 4 and _debug("$sftp->DESTROY called (current pid: $$, disconnect_by_pid: ".($dbpid||'').")");
-
     $sftp->disconnect if (!defined $dbpid or $dbpid == $$);
 }
 
