@@ -421,7 +421,6 @@ sub _check_extension {
     return undef;
 }
 
-# helper methods:
 sub _get_msg_and_check {
     my ($sftp, $etype, $eid, $err, $errstr) = @_;
     my $msg = $sftp->_get_msg;
@@ -463,8 +462,8 @@ sub _get_msg_and_check {
 # reads SSH2_FXP_HANDLE packet and returns handle, or undef on failure
 sub _get_handle {
     my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_HANDLE, $eid,
-					    $error, $errstr)) {
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_HANDLE, $eid,
+                                                    $error, $errstr))) {
 	return _buf_shift_str($msg);
     }
     return undef;
