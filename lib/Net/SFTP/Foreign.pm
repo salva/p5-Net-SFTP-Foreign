@@ -45,15 +45,14 @@ use Net::SFTP::Foreign::Buffer;
 require Net::SFTP::Foreign::Common;
 our @ISA = qw(Net::SFTP::Foreign::Common);
 
+our $windows;
 our $dirty_cleanup;
-my $windows;
+
 
 BEGIN {
-    $windows = ($^O =~ /in(?:32|64)/i ? 1 : 0);
-
-    unless (defined $dirty_cleanup) {
-        $dirty_cleanup = ($^O =~ /solaris/i ? 1 : 0);
-    }
+    $windows = $^O =~ /in(?:32|64)/i;
+    $dirty_cleanup = ($^O =~ /solaris/i ? 2 : 1)
+        unless defined $dirty_cleanup;
 }
 
 sub _queue_msg {
@@ -220,8 +219,8 @@ sub new {
         _debug "Loaded from $INC{'Net/SFTP/Foreign.pm'}";
         _debug "Running on Perl $^V for $^O";
         _debug "debug set to $debug";
-        _debug "windows set to $windows";
-        _debug "dirty_cleanup set to $dirty_cleanup";
+        _debug "windows set to " . (defined $windows ? $windows : '<undef>');
+        _debug "dirty_cleanup set to " . (defined $dirty_cleanup ? $dirty_cleanup : '<undef>');
         _debug "~0 is " . ~0;
     }
 
@@ -297,11 +296,15 @@ sub disconnect {
 
     $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'').")");
 
+    local ($sftp->{_autodie});
     $sftp->_conn_lost;
 
     if (defined $pid) {
+        local ($!, $?, $@, $SIG{__DIE__}, $SIG{__WARN__}, $SIG{ALRM});
+
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
+
         if ($windows) {
 	    kill KILL => $pid
                 and waitpid($pid, 0);
@@ -311,36 +314,25 @@ sub disconnect {
 			  ? $sftp->{_dirty_cleanup}
 			  : $dirty_cleanup );
 
-	    if ($dirty or not defined $dirty) {
-		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
-		    $sig and kill $sig, $pid;
-
-		    my $except;
-		    {
-			local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-			eval {
-			    local $SIG{ALRM} = sub { die "timeout\n" };
-			    alarm 8;
-			    waitpid($pid, 0);
-			    alarm 0;
-			};
-			$except = $@;
-		    }
-		    if ($except) {
-			next if $except =~ /^timeout/;
-			die $except;
-		    }
-		    last;
+	    if ($dirty) {
+                kill TERM => $pid if $dirty > 1;
+		for my $sig (qw(TERM TERM KILL KILL)) {
+                    my $r;
+                    eval {
+                        alarm 8;
+                        $r = waitpid($pid, 0);
+                        alarm 0;
+                    };
+                    last if defined $r and ( $r > 0 or $! == Errno::ECHILD());
+                    kill $sig => $pid;
 		}
 	    }
 	    else {
 		while (1) {
 		    last if waitpid($pid, 0) > 0;
-		    if ($! != Errno::EINTR) {
-			warn "internal error: unexpected error in waitpid($pid): $!"
-			    if $! != Errno::ECHILD;
-			last;
-		    }
+                    last if $! == Errno::ECHILD();
+		    $! == Errno::EINTR() or
+                        warn "internal error: unexpected error in waitpid($pid): $!";
 		}
 	    }
         }
@@ -349,9 +341,8 @@ sub disconnect {
 }
 
 sub DESTROY {
-    local ($?, $!, $@);
-
     my $sftp = shift;
+    local ($?, $!, $@, $sftp->{_autodie});
     my $dbpid = $sftp->{_disconnect_by_pid};
 
     $debug and $debug & 4 and _debug("$sftp->DESTROY called (current pid: $$, disconnect_by_pid: ".($dbpid||'').")");
