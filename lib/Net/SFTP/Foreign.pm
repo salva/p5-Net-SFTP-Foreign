@@ -49,10 +49,10 @@ our $dirty_cleanup;
 my $windows;
 
 BEGIN {
-    $windows = $^O =~ /Win(?:32|64)/;
+    $windows = ($^O =~ /in(?:32|64)/i ? 1 : 0);
 
-    if ($^O =~ /solaris/i) {
-	$dirty_cleanup = 1 unless defined $dirty_cleanup;
+    unless (defined $dirty_cleanup) {
+        $dirty_cleanup = ($^O =~ /solaris/i ? 1 : 0);
     }
 }
 
@@ -178,24 +178,20 @@ sub _get_msg {
     my $sftp = shift;
 
     $debug and $debug & 1 and _debug("waiting for message... [$sftp->{_queued}]");
-
     unless ($sftp->_do_io($sftp->{_timeout})) {
 	$sftp->_conn_lost(undef, undef, "Connection to remote server stalled");
 	return undef;
     }
-
-    my $bin = \$sftp->{_bin};
-    my $len = unpack N => substr($$bin, 0, 4, '');
-    my $msg = substr($$bin, 0, $len, '');
+    my $msg = _buf_shift_str($sftp->{_bin});
 
     if ($debug and $debug & 1) {
 	$sftp->{_queued}--;
-        my ($code, $id, $status) = unpack( CNN => $$msg);
+        my ($code, $id, $status) = unpack( CNN => $msg);
 	$id = '-' if $code == SSH2_FXP_VERSION;
         $status = '-' unless $code == SSH2_FXP_STATUS;
 	_debug(sprintf("got it!, len:%i, code:%i, id:%s, status: %s",
-                       $len, $code, $id, $status));
-        $debug & 8 and _hexdump($$msg);
+                       length($msg), $code, $id, $status));
+        $debug & 8 and _hexdump($msg);
     }
 
     return $msg;
@@ -3035,7 +3031,6 @@ sub _get_statvfs {
     my ($sftp, $eid, $error, $errstr) = @_;
     if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
                                                     $eid, $error, $errstr))) {
-        # printf STDERR "msg length: %i\n", length $$msg;
         my %statvfs = map { $_ => _buf_shift_uint64($msg) } qw(bsize frsize blocks
                                                               bfree bavail files ffree
                                                               favail fsid flag namemax);
