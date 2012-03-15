@@ -1304,9 +1304,9 @@ sub readdir {
     }
 
     if (wantarray) {
-	my $old = $cache;
-	$cache = [];
-	return @$old;
+	my @old = @$cache;
+	@$cache = ();
+	return @old;
     }
     shift @$cache;
 }
