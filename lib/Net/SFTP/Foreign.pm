@@ -202,10 +202,7 @@ sub _get_msg {
 }
 
 sub _croak_bad_options {
-    if (@_) {
-        my $s = (@_ > 1 ? 's' : '');
-        croak "Invalid option$s '" . CORE::join("', '", @_) . "' or bad combination of options";
-    }
+    @_ and croak "Invalid option(s) '" . CORE::join("', '", @_) . "' or bad combination";
 }
 
 sub new {
@@ -220,7 +217,6 @@ sub new {
 		 _bin => '',
 		 _connected => 1,
 		 _queued => 0 };
-
     bless $sftp, $class;
 
     if ($debug) {
@@ -228,6 +224,8 @@ sub new {
         _debug "Loaded from $INC{'Net/SFTP/Foreign.pm'}";
         _debug "Running on Perl $^V for $^O";
         _debug "debug set to $debug";
+        _debug "windows set to $windows";
+        _debug "dirty_cleanup set to $dirty_cleanup";
         _debug "~0 is " . ~0;
     }
 
