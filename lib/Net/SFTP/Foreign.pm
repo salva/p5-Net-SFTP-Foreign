@@ -629,9 +629,9 @@ sub sftpread {
     my $id = $sftp->_queue_msg(SSH2_FXP_READ, str=> $rfid,
                                uint64 => $offset, uint32 => $size);
 
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_DATA, $id,
-					    SFTP_ERR_REMOTE_READ_FAILED,
-					    "Couldn't read from remote file")) {
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_DATA, $id,
+                                                    SFTP_ERR_REMOTE_READ_FAILED,
+                                                    "Couldn't read from remote file"))) {
 	return _buf_shift_str($msg);
     }
     return undef;
@@ -1038,8 +1038,8 @@ sub _gen_stat_method {
 
 	my ($sftp, $path) = @_;
 	my $id = $sftp->_queue_path_request($code, $path);
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
-						$error, $errstr)) {
+	if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
+                                                        $error, $errstr))) {
             return $sftp->_buf_shift_attrs($msg);
 	}
 	return undef;
@@ -1064,9 +1064,9 @@ sub fstat {
     my $sftp = shift;
     my $id = $sftp->_queue_rfid_request(SSH2_FXP_FSTAT, @_);
     defined $id or return undef;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
-					    SFTP_ERR_REMOTE_STAT_FAILED,
-					    "Couldn't stat remote file (fstat)")) {
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
+                                                    SFTP_ERR_REMOTE_STAT_FAILED,
+                                                    "Couldn't stat remote file (fstat)"))) {
         return $sftp->_buf_shift_attrs($msg)
     }
     return undef;
@@ -1278,9 +1278,9 @@ sub readdir {
 
     while (!@$cache or wantarray) {
 	my $id = $sftp->_queue_str_request(SSH2_FXP_READDIR, $rdid);
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
-						SFTP_ERR_REMOTE_READDIR_FAILED,
-						"Couldn't read remote directory" )) {
+	if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
+                                                        SFTP_ERR_REMOTE_READDIR_FAILED,
+                                                        "Couldn't read remote directory"))) {
 	    my $count = _buf_shift_uint32($msg) or last;
 
 	    for (1..$count) {
@@ -1328,9 +1328,9 @@ sub _gen_getpath_method {
 
 	my ($sftp, $path) = @_;
 	my $id = $sftp->_queue_path_request($code, $path);
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
-						$error,
-						"Couldn't get $name for remote '$path'")) {
+	if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
+                                                        $error,
+                                                        "Couldn't get $name for remote '$path'"))) {
 	    _buf_shift_uint32($msg) > 0
 		and return $sftp->_buf_shift_path($msg);
 
@@ -2401,9 +2401,9 @@ sub ls {
                 while (@msgid < $queue_size);
 
             my $id = shift @msgid;
-            if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
-                                                    SFTP_ERR_REMOTE_READDIR_FAILED,
-                                                    "Couldn't read directory '$dir'" )) {
+            if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
+                                                            SFTP_ERR_REMOTE_READDIR_FAILED,
+                                                            "Couldn't read directory '$dir'"))) {
                 my $count = _buf_shift_uint32($msg) or last;
 
                 if ($cheap) {
@@ -3035,8 +3035,8 @@ sub mput {
 
 sub _get_statvfs {
     my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
-                                            $eid, $error, $errstr)) {
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
+                                                    $eid, $error, $errstr))) {
         # printf STDERR "msg length: %i\n", length $$msg;
         my %statvfs = map { $_ => _buf_shift_uint64($msg) } qw(bsize frsize blocks
                                                               bfree bavail files ffree
