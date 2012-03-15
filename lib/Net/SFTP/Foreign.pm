@@ -35,7 +35,8 @@ use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
                                    _sort_entries _gen_wanted
                                    _gen_converter _hexdump
                                    _ensure_list _catch_tainted_args
-                                   _file_part _umask_save_and_set);
+                                   _file_part _umask_save_and_set
+                                   _untaint);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -976,18 +977,18 @@ sub _buf_shift_attrs {
     my $a = Net::SFTP::Foreign::Attributes->new;
     my $flags = _buf_shift_uint32($_[0]);
     if ($flags & SSH2_FILEXFER_ATTR_SIZE) {
-        $a->set_size(_buf_shift_uint64($_[0]));
+        $a->set_size(_untaint(_buf_shift_uint64($_[0])));
     }
     if ($flags & SSH2_FILEXFER_ATTR_UIDGID) {
-        $a->set_ugid(_buf_shift_uint32($_[0]),
-                     _buf_shift_uint32($_[0]));
+        $a->set_ugid(_untaint(_buf_shift_uint32($_[0])),
+                     _untaint(_buf_shift_uint32($_[0])));
     }
     if ($flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
-        $a->set_perm(_buf_shift_uint32($_[0]));
+        $a->set_perm(_untaint(_buf_shift_uint32($_[0])));
     }
     if ($flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
-        $a->set_amtime(_buf_shift_uint32($_[0]),
-                       _buf_shift_uint32($_[0]));
+        $a->set_amtime(_untaint(_buf_shift_uint32($_[0])),
+                       _untaint(_buf_shift_uint32($_[0])));
     }
     if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
         my $n = _buf_shift_uint32($_[0]);
@@ -1020,7 +1021,7 @@ sub _buf_skip_attrs {
         my $n = _buf_shift_uint32($_[0]);
         for (1 .. 2 * $n) {
             last unless length $_[0];
-            _buf_skip_str($_[0]);
+            _buf_shift_str($_[0]);
         }
     }
 }
@@ -2420,7 +2421,7 @@ sub ls {
                     for (1..$count) {
                         my $fn = $sftp->_buf_shift_path($msg);
                         push @dir, $fn if (!defined $cheap_wanted or $fn =~ $cheap_wanted);
-                        _buf_skip_str($msg);
+                        _buf_shift_str($msg);
                         $sftp->_buf_skip_attrs($msg);
                     }
                 }
