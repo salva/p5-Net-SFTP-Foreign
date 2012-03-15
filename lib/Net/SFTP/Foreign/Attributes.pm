@@ -29,62 +29,6 @@ sub new_from_stat {
     return undef;
 }
 
-sub new_from_buffer {
-    my ($class, $buf) = @_;
-    my $self = $class->new;
-    my $flags = $self->{flags} = $buf->get_int32_untaint;
-
-    if ($flags & SSH2_FILEXFER_ATTR_SIZE) {
-	$self->{size} = $buf->get_int64_untaint;
-    }
-
-    if ($flags & SSH2_FILEXFER_ATTR_UIDGID) {
-	$self->{uid} = $buf->get_int32_untaint;
-	$self->{gid} = $buf->get_int32_untaint;
-    }
-
-    if ($flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
-	$self->{perm} = $buf->get_int32_untaint;
-    }
-
-    if ($flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
-	$self->{atime} = $buf->get_int32_untaint;
-	$self->{mtime} = $buf->get_int32_untaint;
-    }
-
-    if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
-        my $n = $buf->get_int32;
-	$n >= 0 and $n <= 10000 or return undef;
-        my @pairs = map $buf->get_str, 1..2*$n;
-        $self->{extended} = \@pairs;
-    }
-
-    $self;
-}
-
-sub skip_from_buffer {
-    my ($class, $buf) = @_;
-    my $flags = $buf->get_int32;
-    if ($flags == ( SSH2_FILEXFER_ATTR_SIZE |
-		    SSH2_FILEXFER_ATTR_UIDGID |
-		    SSH2_FILEXFER_ATTR_PERMISSIONS |
-		    SSH2_FILEXFER_ATTR_ACMODTIME )) {
-	$buf->skip_bytes(28);
-    }
-    else {
-	my $len = 0;
-	$len += 8 if $flags & SSH2_FILEXFER_ATTR_SIZE;
-	$len += 8 if $flags & SSH2_FILEXFER_ATTR_UIDGID;
-	$len += 4 if $flags & SSH2_FILEXFER_ATTR_PERMISSIONS;
-	$len += 8 if $flags & SSH2_FILEXFER_ATTR_ACMODTIME;
-	$buf->skip_bytes($len);
-	if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
-	    my $n = $buf->get_int32;
-	    $buf->skip_str, $buf->skip_str for (1..$n);
-	}
-    }
-}
-
 sub flags { shift->{flags} }
 
 sub size { shift->{size} }
@@ -219,15 +163,6 @@ I<Net::SFTP::Foreign::Buffer> objects.
 =item Net::SFTP::Foreign::Attributes-E<gt>new()
 
 Returns a new C<Net::SFTP::Foreign::Attributes> object.
-
-=item Net::SFTP::Foreign::Attributes-E<gt>new_from_buffer($buffer)
-
-Creates a new attributes object and populates it with information read
-from C<$buffer>.
-
-=item $attrs-E<gt>as_buffer
-
-Serializes the I<Attributes> object I<$attrs> into a buffer object.
 
 =item $attrs-E<gt>flags
 
