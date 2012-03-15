@@ -400,6 +400,8 @@ sub _check_extension {
 
 sub _get_msg_and_check {
     my ($sftp, $etype, $eid, $err, $errstr) = @_;
+    defined $eid or return undef;
+
     my $msg = $sftp->_get_msg;
     defined $msg or return undef;
 
@@ -1061,7 +1063,7 @@ sub _gen_remove_method {
         my ($sftp, $path) = @_;
         my $id = $sftp->_queue_path_request($code, $path);
         $sftp->_check_status_ok($id, $error, $errstr);
-    };
+    }
 }
 
 *remove = _gen_remove_method(SSH2_FXP_REMOVE,
@@ -1384,21 +1386,28 @@ sub rename {
     $sftp->_ok_or_autodie;
 }
 
+sub _queue_extended_msg {
+    my $sftp = shift;
+    my $extension = shift;
+    my $version = shift;
+    my $error = shift;
+    my $error_str = shift;
+    $sftp->_check_extension($extension, $version, $error, $error_str) and
+        $sftp->_queue_msg(SSH2_FXP_EXTENDED, str => $extension, @_);
+}
+
 sub atomic_rename {
     @_ == 3 or croak 'Usage: $sftp->atomic_rename($old, $new)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $old, $new) = @_;
 
-    $sftp->_check_extension('posix-rename@openssh.com' => 1,
-                             SFTP_ERR_REMOTE_RENAME_FAILED,
-                            "atomic rename failed")
-        or return undef;
+    my $id = $sftp->_queue_extended_msg('posix-rename@openssh.com' => 1,
+                                        SFTP_ERR_REMOTE_RENAME_FAILED,
+                                        "atomic rename failed",
+                                        abs_path => $old,
+                                        abs_path => $new);
 
-    my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
-                               str => 'posix-rename@openssh.com',
-                               abs_path => $old,
-                               abs_path => $new);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
 }
@@ -1423,15 +1432,11 @@ sub hardlink {
 
     my ($sftp, $hl, $target) = @_;
 
-    $sftp->_check_extension('hardlink@openssh.com' => 1,
-                            SFTP_ERR_REMOTE_HARDLINK_FAILED,
-                            "hardlink failed")
-        or return undef;
-
-    my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
-                               str => 'hardlink@openssh.com',
-                               abs_path => $target,
-                               abs_path => $hl);
+    my $id = $sftp->_queue_extended_msg('hardlink@openssh.com' => 1,
+                                        SFTP_ERR_REMOTE_HARDLINK_FAILED,
+                                        "hardlink failed",
+                                        abs_path => $target,
+                                        abs_path => $hl);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_HARDLINK_FAILED,
                             "Couldn't create hardlink '$hl' pointing to '$target'");
 }
@@ -3027,14 +3032,10 @@ sub statvfs {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path) = @_;
-    $sftp->_check_extension('statvfs@openssh.com' => 2,
-                            SFTP_ERR_REMOTE_STATVFS_FAILED,
-                            "statvfs failed")
-        or return undef;
-
-    my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
-                               str => 'statvfs@openssh.com',
-                               abs_path => $path);
+    my $id = $sftp->_queue_extended_msg('statvfs@openssh.com' => 2,
+                                        SFTP_ERR_REMOTE_STATVFS_FAILED,
+                                        "statvfs failed",
+                                        abs_path => $path);
     $sftp->_get_statvfs($id,
                         SFTP_ERR_REMOTE_STATVFS_FAILED,
                         "Couldn't stat remote file system");
@@ -3045,15 +3046,11 @@ sub fstatvfs {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $fh) = @_;
-    $sftp->_check_extension('fstatvfs@openssh.com' => 2,
-                            SFTP_ERR_REMOTE_FSTATVFS_FAILED,
-                            "fstatvfs failed")
-        or return undef;
-
     my $rid = $sftp->_rid($fh);
-    my $id = $sftp->_queue_msg(SSH2_FXP_EXTENDED,
-                               str => 'fstatvfs@openssh.com',
-                               str => $rid);
+    my $id = $sftp->_queue_extended_msg('fstatvfs@openssh.com' => 2,
+                                        SFTP_ERR_REMOTE_FSTATVFS_FAILED,
+                                        "fstatvfs failed",
+                                        str => $rid);
     $sftp->_get_statvfs($id,
                         SFTP_ERR_REMOTE_FSTATVFS_FAILED,
                         "Couldn't stat remote file system");
