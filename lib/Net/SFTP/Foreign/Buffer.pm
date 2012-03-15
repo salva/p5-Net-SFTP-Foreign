@@ -17,7 +17,6 @@ our @EXPORT = qw( _buf_shift_uint32
 		  _buf_shift_utf8
 
                   _buf_skip_bytes
-                  _buf_skip_str
 
 		  _buf_push_uint32
                   _buf_push_uint64
@@ -68,27 +67,19 @@ BEGIN {
 }
 
 sub _buf_shift_str {
-    if (my ($len) = unpack N => substr($_[0], 0, 4, '')) {
-	return substr($_[0], 0, $len, '')
-	    if (length $_[0] >= $len);
-    }
-    ()
+    my $len = substr($_[0], 0, 4, '');
+    return undef unless length $len == 4;
+    substr($_[0], 0, unpack(N => $len), '');
 }
 
 sub _buf_shift_utf8 {
-    if (my ($len) = unpack N => substr($_[0], 0, 4, '')) {
-	return Encode::decode(utf8 => substr($_[0], 0, $len, ''))
-	    if (length $_[0] >= $len);
-    }
-    ()
+    my $len = substr($_[0], 0, 4, '');
+    return undef unless length $len == 4;
+    Encode::decode(utf8 => substr($_[0], 0, unpack(N => $len), ''));
 }
 
 sub _buf_skip_bytes { substr $_[0], 0, $_[1], '' }
 
-sub _buf_skip_str {
-    my $len = unpack(N => substr($_[0], 0, 4, ''));
-    substr($_[0], 0, $len, '') if $len;
-}
 
 
 sub _buf_push_uint8 { $_[0] .= pack(C => int $_[1]) }
