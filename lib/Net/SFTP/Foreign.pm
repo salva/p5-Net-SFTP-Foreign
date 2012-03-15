@@ -282,16 +282,11 @@ sub new {
 
 sub autodisconnect {
     my ($sftp, $ad) = @_;
-    if (defined $ad and $ad != 1) {
-        if ($ad == 0) {
-            $sftp->{_disconnect_by_pid} = -1;
-        }
-        elsif ($ad == 2) {
-            $sftp->{_disconnect_by_pid} = $$;
-        }
-        else {
-            croak "bad value '$ad' for autodisconnect";
-        }
+    if (defined $ad) {
+        $sftp->{_disconnect_by_pid} = ( $ad == 0 ?    -1 :
+                                        $ad == 1 ? undef :
+                                        $ad == 2 ?    $$ :
+                                        croak "bad value '$ad' for autodisconnect");
     }
     1;
 }
