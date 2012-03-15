@@ -85,31 +85,6 @@ sub skip_from_buffer {
     }
 }
 
-sub as_buffer {
-    my $a = shift;
-    my $buf = Net::SFTP::Foreign::Buffer->new(int32 => $a->{flags});
-
-    if ($a->{flags} & SSH2_FILEXFER_ATTR_SIZE) {
-        $buf->put_int64(int $a->{size});
-    }
-    if ($a->{flags} & SSH2_FILEXFER_ATTR_UIDGID) {
-        $buf->put(int32 => $a->{uid}, int32 => $a->{gid});
-    }
-    if ($a->{flags} & SSH2_FILEXFER_ATTR_PERMISSIONS) {
-        $buf->put_int32($a->{perm});
-    }
-    if ($a->{flags} & SSH2_FILEXFER_ATTR_ACMODTIME) {
-        $buf->put(int32 => $a->{atime}, int32 => $a->{mtime});
-    }
-    if ($a->{flags} & SSH2_FILEXFER_ATTR_EXTENDED) {
-        my $pairs = $a->{extended};
-        $buf->put_int32(int(@$pairs / 2));
-        $buf->put_str($_) for @$pairs;
-    }
-
-    $buf;
-}
-
 sub flags { shift->{flags} }
 
 sub size { shift->{size} }
