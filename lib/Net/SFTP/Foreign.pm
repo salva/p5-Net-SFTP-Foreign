@@ -56,12 +56,10 @@ BEGIN {
     }
 }
 
-sub _next_msg_id { shift->{_msg_id}++ }
-
 sub _queue_msg {
     my $sftp = shift;
     my $code = shift;
-    my $id = $sftp->_next_msg_id;
+    my $id = $sftp->{_msg_id}++;
     $sftp->_queue_msg_low($code, uint32 => $id, @_);
     return $id;
 }
@@ -130,7 +128,7 @@ sub _buf_push_attrs {
             _buf_push_uint32($_[1], $a->mtime);
         }
         if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
-            my $pairs = $a->{extended};
+            my $pairs = $a->extended;
             _buf_push_uint32($_[1], int(@$pairs / 2));
             for my $str (@$pairs) {
                 _buf_push_str($_[1], $str);
@@ -143,14 +141,12 @@ sub _buf_push_attrs {
 }
 
 sub _buf_push_path {
-    my $sftp = shift;
-    _buf_push_str($_[0], Encode::encode($sftp->{_fs_encoding}, $_[1]));
+    _buf_push_str($_[1], Encode::encode($_[0]->{_fs_encoding}, $_[2]))
 }
 
 sub _buf_push_abs_path {
-    my $sftp = shift;
-    _buf_push_str($_[0], Encode::encode($sftp->{_fs_encoding},
-                                        $sftp->_rel2abs($_[1])));
+    _buf_push_str($_[1], Encode::encode($_[0]->{_fs_encoding},
+                                        $_[0]->_rel2abs($_[2])));
 }
 
 sub _do_io { $_[0]->{_backend}->_do_io(@_) }
@@ -430,35 +426,39 @@ sub _check_extension {
 sub _get_msg_and_check {
     my ($sftp, $etype, $eid, $err, $errstr) = @_;
     my $msg = $sftp->_get_msg;
-    if ($msg) {
-	my $type = _buf_shift_uint8($msg);
-	my $id = _buf_shift_uint32($msg);
+    defined $msg or return undef;
 
-	$sftp->_clear_error_and_status;
+    $sftp->_clear_error_and_status;
 
-	if ($id != $eid) {
-	    $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
-			      SFTP_ERR_REMOTE_BAD_MESSAGE,
-			      $errstr, "bad packet sequence, expected $eid, got $id");
-	    return undef;
-	}
+    my $type = _buf_shift_uint8($msg);
+    my $id = _buf_shift_uint32($msg);
 
-	if ($type != $etype) {
-	    if ($type == SSH2_FXP_STATUS) {
-                my $code = _buf_shift_uint32($msg);
-                my $str = _buf_shift_utf8($msg);
-		my $status = $sftp->_set_status($code, (defined $str ? $str : ()));
-		$sftp->_set_error($err, $errstr, $status);
-	    }
-	    else {
-		$sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
-				  SFTP_ERR_REMOTE_BAD_MESSAGE,
-				  $errstr, "bad packet type, expected $etype packet, got $type");
-	    }
-	    return undef;
-	}
+    unless ($id == $eid) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
+                          SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          $errstr, "bad packet sequence, expected $eid, got $id");
+        return undef;
     }
-    $msg;
+
+    if ($type == SSH2_FXP_STATUS) {
+        my $code = _buf_shift_uint32($msg);
+        my $str = _buf_shift_utf8($msg);
+        my $status = $sftp->_set_status($code, (defined $str ? $str : ()));
+
+        $sftp->_set_error($err, $errstr, $status)
+            unless $etype == SSH2_FXP_STATUS and $status == SSH2_FX_OK;
+
+        return undef;
+    }
+
+    if ($type != $etype) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
+                          SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          $errstr, "bad packet type, expected $etype packet, got $type");
+        return undef;
+    }
+
+    return $msg;
 }
 
 # reads SSH2_FXP_HANDLE packet and returns handle, or undef on failure
@@ -495,9 +495,8 @@ sub _queue_rid_request {
     my ($sftp, $code, $fh, $attrs) = @_;
     my $rid = $sftp->_rid($fh);
     return undef unless defined $rid;
-
     $sftp->_queue_msg($code, str => $rid,
-                      (defined $attrs ? (attrs => $attrs) : ()));
+                      (@_ == 4 ? (attrs => $attrs) : ()));
 }
 
 sub _queue_rfid_request {
@@ -519,15 +518,9 @@ sub _queue_path_request {
 }
 
 sub _check_status_ok {
-    my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_STATUS, $eid,
-					    $error, $errstr)) {
-	my $status = $sftp->_set_status(_buf_shift_uint32($msg), _buf_shift_str($msg));
-	return 1 if $status == SSH2_FX_OK;
-
-	$sftp->_set_error($error, $errstr, $status);
-    }
-    return undef;
+    my $sftp = shift;
+    $sftp->_get_msg_and_check(SSH2_FXP_STATUS, @_);
+    return !$sftp->{_error};
 }
 
 sub setcwd {
