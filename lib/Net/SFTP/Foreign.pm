@@ -373,41 +373,40 @@ sub DESTROY {
 sub _init {
     my $sftp = shift;
     $sftp->_queue_msg_low(SSH2_FXP_INIT, uint32 => SSH2_FILEXFER_VERSION);
-
-    if (my $msg = $sftp->_get_msg) {
-	my $type = _buf_shift_uint8($msg);
-	if ($type == SSH2_FXP_VERSION) {
-	    my $version = _buf_shift_uint32($msg);
-
-	    $sftp->{server_version} = $version;
-            $sftp->{server_extensions} = {};
-            while (length $msg) {
-                my $key   = _buf_shift_str($msg);
-                my $value = _buf_shift_str($msg);
-                $sftp->{server_extensions}{$key} = $value;
-                if ($key eq 'vendor-id') {
-                    $sftp->{server_extensions__vendor_id} = [ _buf_shift_utf8($value),
-                                                              _buf_shift_utf8($value),
-                                                              _buf_shift_utf8($value),
-                                                              _buf_shift_uint64($value) ];
-                }
-
-            }
-
-	    return $version;
-	}
-
-	$sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
-			  SFTP_ERR_REMOTE_BAD_MESSAGE,
-			  "bad packet type, expecting SSH2_FXP_VERSION, got $type");
-    }
-    elsif ($sftp->{_status} == SSH2_FX_CONNECTION_LOST
-	   and $sftp->{_password_authentication}
-	   and $sftp->{_password_sent}) {
-	$sftp->_set_error(SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED,
+    my $msg = $sftp->_get_msg;
+    unless (defined $msg) {
+        if ($sftp->{_status} == SSH2_FX_CONNECTION_LOST
+         and $sftp->{_password_authentication}
+         and $sftp->{_password_sent}) {
+            $sftp->_set_error(SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED,
 			  "Password authentication failed or connection lost");
+        }
+        return undef;
     }
-    return undef;
+
+    my $type = _buf_shift_uint8($msg);
+    if ($type != SSH2_FXP_VERSION) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
+                          SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          "bad packet type, expecting SSH2_FXP_VERSION, got $type");
+        return undef;
+
+    }
+
+    my $version = $sftp->{server_version} = _buf_shift_uint32($msg);
+    $sftp->{server_extensions} = {};
+    while (length $msg) {
+        my $key   = _buf_shift_str($msg);
+        my $value = _buf_shift_str($msg);
+        $sftp->{server_extensions}{$key} = $value;
+        if ($key eq 'vendor-id') {
+            $sftp->{server_extensions__vendor_id} = [ _buf_shift_utf8($value),
+                                                      _buf_shift_utf8($value),
+                                                      _buf_shift_utf8($value),
+                                                      _buf_shift_uint64($value) ];
+        }
+    }
+    return $version;
 }
 
 sub server_extensions { %{shift->{server_extensions}} }
@@ -1314,13 +1313,11 @@ sub readdir {
 sub _readdir {
     my ($sftp, $rdh);
     if (wantarray) {
-	my $line = $sftp->readdir($rdh);
-	if (defined $line) {
-	    return $line->{filename};
-	}
+	my $line = $sftp->readdir($rdh) or return undef;
+	return $line->{filename};
     }
     else {
-	return map { $_->{filename} } $sftp->readdir($rdh);
+        return map { $_->{filename} } $sftp->readdir($rdh);
     }
 }
 
