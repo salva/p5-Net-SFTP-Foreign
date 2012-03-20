@@ -28,7 +28,8 @@ our @EXPORT_OK = qw( _is_lnk
 		     _glob_to_regex
                      _file_part
                      _umask_save_and_set
-                     _tcroak );
+                     _tcroak
+                     _untaint );
 
 our $debug;
 
@@ -226,6 +227,11 @@ sub _catch_tainted_args {
             }
         }
     }
+}
+
+sub _untaint {
+    return $_[0] unless tainted $_[0];
+    ($_[0] =~ /^(.*)$/s)[0];
 }
 
 sub _gen_dos2unix {

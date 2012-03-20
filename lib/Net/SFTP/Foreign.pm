@@ -35,7 +35,8 @@ use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
                                    _sort_entries _gen_wanted
                                    _gen_converter _hexdump
                                    _ensure_list _catch_tainted_args
-                                   _file_part _umask_save_and_set);
+                                   _file_part _umask_save_and_set
+                                   _untaint);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -44,48 +45,108 @@ use Net::SFTP::Foreign::Buffer;
 require Net::SFTP::Foreign::Common;
 our @ISA = qw(Net::SFTP::Foreign::Common);
 
+our $windows;
 our $dirty_cleanup;
-my $windows;
+
 
 BEGIN {
-    $windows = $^O =~ /Win(?:32|64)/;
-
-    if ($^O =~ /solaris/i) {
-	$dirty_cleanup = 1 unless defined $dirty_cleanup;
-    }
-}
-
-sub _next_msg_id { shift->{_msg_id}++ }
-
-use constant _empty_attributes => Net::SFTP::Foreign::Attributes->new;
-
-sub _queue_new_msg {
-    my $sftp = shift;
-    my $code = shift;
-    my $id = $sftp->_next_msg_id;
-    my $msg = Net::SFTP::Foreign::Buffer->new(int8 => $code, int32 => $id, @_);
-    $sftp->_queue_msg($msg);
-    return $id;
+    $windows = $^O =~ /in(?:32|64)/i;
+    $dirty_cleanup = ($^O =~ /solaris/i ? 2 : 1)
+        unless defined $dirty_cleanup;
 }
 
 sub _queue_msg {
-    my ($sftp, $buf) = @_;
-
-    my $bytes = $buf->bytes;
-    my $len = length $bytes;
-
-    if ($debug and $debug & 1) {
-	$sftp->{_queued}++;
-	_debug(sprintf("queueing msg len: %i, code:%i, id:%i ... [$sftp->{_queued}]",
-		       $len, unpack(CN => $bytes)));
-
-        $debug & 16 and _hexdump(pack('N', length($bytes)) . $bytes);
-    }
-
-    $sftp->{_bout} .= pack('N', length($bytes));
-    $sftp->{_bout} .= $bytes;
+    my $sftp = shift;
+    my $code = shift;
+    my $id = $sftp->{_msg_id}++;
+    $sftp->_queue_msg_low($code, uint32 => $id, @_);
+    return $id;
 }
 
+my %buffer_packer_sub =   ( uint8     => \&_buf_push_uint8,
+                            uint32    => \&_buf_push_uint32,
+                            uint64    => \&_buf_push_uint64,
+                            str       => \&_buf_push_str,
+                            utf8      => \&_buf_push_uint8 );
+
+my %buffer_packer_method = ( abs_path => '_buf_push_abs_path',
+                             path     => '_buf_push_path',
+                             attrs    => '_buf_push_attrs' );
+
+sub _queue_msg_low {
+    my $sftp = shift;
+    my $code = shift;
+    for ($sftp->{_bout}) {
+        my $offset = length $_;
+        $_ .= pack(NC => 0, $code);
+        for (my $i = 0; $i < @_; $i += 2) {
+            my $packer = $buffer_packer_sub{$_[$i]};
+            if ($packer) {
+                $packer->($_, $_[$i+1])
+            }
+            else {
+                $packer = $buffer_packer_method{$_[$i]};
+                if ($packer) {
+                    $sftp->$packer($_, $_[$i+1]);
+                }
+                else {
+                    Carp::confess("internal error: unknown packer type $_[$i]");
+                }
+            }
+        }
+        my $len = length($_) - $offset - 4;
+        substr($_, $offset, 4, pack(N => $len));
+
+        if ($debug and $debug & 1) {
+            $sftp->{_queued}++;
+            _debug(sprintf("queueing msg len: %i, code:%i, id:%i ... [%d]",
+                           unpack(NCN => substr($_, $offset)), ++$sftp->{_queued}));
+            $debug & 16 and _hexdump(substr($_, $offset));
+        }
+        return;
+    }
+}
+
+sub _buf_push_attrs {
+    my ($sftp, undef, $a) = @_;
+    if (defined $a) {
+        my $flags = $a->flags;
+        _buf_push_uint32($_[1], $flags);
+        if ($flags & SSH2_FILEXFER_ATTR_SIZE) {
+            _buf_push_uint64($_[1], $a->size);
+        }
+        if ($flags & SSH2_FILEXFER_ATTR_UIDGID) {
+            _buf_push_uint32($_[1], $a->uid);
+            _buf_push_uint32($_[1], $a->gid);
+        }
+        if ($flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
+            _buf_push_uint32($_[1], $a->perm);
+        }
+        if ($flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
+            _buf_push_uint32($_[1], $a->atime);
+            _buf_push_uint32($_[1], $a->mtime);
+        }
+        if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
+            my $pairs = $a->extended;
+            _buf_push_uint32($_[1], int(@$pairs / 2));
+            for my $str (@$pairs) {
+                _buf_push_str($_[1], $str);
+            }
+        }
+    }
+    else {
+        _buf_push_uint32($_[1], 0);
+    }
+}
+
+sub _buf_push_path {
+    _buf_push_str($_[1], Encode::encode($_[0]->{_fs_encoding}, $_[2]))
+}
+
+sub _buf_push_abs_path {
+    _buf_push_str($_[1], Encode::encode($_[0]->{_fs_encoding},
+                                        $_[0]->_rel2abs($_[2])));
+}
 
 sub _do_io { $_[0]->{_backend}->_do_io(@_) }
 
@@ -116,44 +177,27 @@ sub _get_msg {
     my $sftp = shift;
 
     $debug and $debug & 1 and _debug("waiting for message... [$sftp->{_queued}]");
-
     unless ($sftp->_do_io($sftp->{_timeout})) {
 	$sftp->_conn_lost(undef, undef, "Connection to remote server stalled");
 	return undef;
     }
-
-    my $bin = \$sftp->{_bin};
-    my $len = unpack N => substr($$bin, 0, 4, '');
-    my $msg = Net::SFTP::Foreign::Buffer->make(substr($$bin, 0, $len, ''));
+    my $msg = _buf_shift_str($sftp->{_bin});
 
     if ($debug and $debug & 1) {
 	$sftp->{_queued}--;
-        my ($code, $id, $status) = unpack( CNN => $$msg);
+        my ($code, $id, $status) = unpack( CNN => $msg);
 	$id = '-' if $code == SSH2_FXP_VERSION;
         $status = '-' unless $code == SSH2_FXP_STATUS;
 	_debug(sprintf("got it!, len:%i, code:%i, id:%s, status: %s",
-                       $len, $code, $id, $status));
-        $debug & 8 and _hexdump($$msg);
+                       length($msg), $code, $id, $status));
+        $debug & 8 and _hexdump($msg);
     }
 
     return $msg;
 }
 
 sub _croak_bad_options {
-    if (@_) {
-        my $s = (@_ > 1 ? 's' : '');
-        croak "Invalid option$s '" . CORE::join("', '", @_) . "' or bad combination of options";
-    }
-}
-
-sub _fs_encode {
-    my ($sftp, $path) = @_;
-    Encode::encode($sftp->{_fs_encoding}, $path);
-}
-
-sub _fs_decode {
-    my ($sftp, $path) = @_;
-    Encode::decode($sftp->{_fs_encoding}, $path);
+    @_ and croak "Invalid option(s) '" . CORE::join("', '", @_) . "' or bad combination";
 }
 
 sub new {
@@ -168,7 +212,6 @@ sub new {
 		 _bin => '',
 		 _connected => 1,
 		 _queued => 0 };
-
     bless $sftp, $class;
 
     if ($debug) {
@@ -176,6 +219,8 @@ sub new {
         _debug "Loaded from $INC{'Net/SFTP/Foreign.pm'}";
         _debug "Running on Perl $^V for $^O";
         _debug "debug set to $debug";
+        _debug "windows set to " . (defined $windows ? $windows : '<undef>');
+        _debug "dirty_cleanup set to " . (defined $dirty_cleanup ? $dirty_cleanup : '<undef>');
         _debug "~0 is " . ~0;
     }
 
@@ -236,16 +281,11 @@ sub new {
 
 sub autodisconnect {
     my ($sftp, $ad) = @_;
-    if (defined $ad and $ad != 1) {
-        if ($ad == 0) {
-            $sftp->{_disconnect_by_pid} = -1;
-        }
-        elsif ($ad == 2) {
-            $sftp->{_disconnect_by_pid} = $$;
-        }
-        else {
-            croak "bad value '$ad' for autodisconnect";
-        }
+    if (defined $ad) {
+        $sftp->{_disconnect_by_pid} = ( $ad == 0 ?    -1 :
+                                        $ad == 1 ? undef :
+                                        $ad == 2 ?    $$ :
+                                        croak "bad value '$ad' for autodisconnect");
     }
     1;
 }
@@ -254,13 +294,16 @@ sub disconnect {
     my $sftp = shift;
     my $pid = $sftp->{pid};
 
-    $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'').")");
+    $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'<undef>').")");
 
+    local $sftp->{_autodie};
     $sftp->_conn_lost;
 
     if (defined $pid) {
         close $sftp->{ssh_out} if (defined $sftp->{ssh_out} and not $sftp->{_ssh_out_is_not_dupped});
         close $sftp->{ssh_in} if defined $sftp->{ssh_in};
+
+        local ($?, $@, $SIG{__DIE__}, $SIG{__WARN__}, $SIG{ALRM});
         if ($windows) {
 	    kill KILL => $pid
                 and waitpid($pid, 0);
@@ -270,36 +313,25 @@ sub disconnect {
 			  ? $sftp->{_dirty_cleanup}
 			  : $dirty_cleanup );
 
-	    if ($dirty or not defined $dirty) {
-		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
-		    $sig and kill $sig, $pid;
-
-		    my $except;
-		    {
-			local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-			eval {
-			    local $SIG{ALRM} = sub { die "timeout\n" };
-			    alarm 8;
-			    waitpid($pid, 0);
-			    alarm 0;
-			};
-			$except = $@;
-		    }
-		    if ($except) {
-			next if $except =~ /^timeout/;
-			die $except;
-		    }
-		    last;
+	    if ($dirty) {
+                kill TERM => $pid if $dirty > 1;
+		for my $sig (qw(TERM TERM KILL KILL)) {
+                    my $r;
+                    eval {
+                        alarm 8;
+                        $r = waitpid($pid, 0);
+                        alarm 0;
+                    };
+                    last if defined $r and ( $r > 0 or $! == Errno::ECHILD());
+                    kill $sig => $pid;
 		}
 	    }
 	    else {
 		while (1) {
 		    last if waitpid($pid, 0) > 0;
-		    if ($! != Errno::EINTR) {
-			warn "internal error: unexpected error in waitpid($pid): $!"
-			    if $! != Errno::ECHILD;
-			last;
-		    }
+                    last if $! == Errno::ECHILD();
+		    $! == Errno::EINTR() or
+                        warn "internal error: unexpected error in waitpid($pid): $!";
 		}
 	    }
         }
@@ -308,57 +340,50 @@ sub disconnect {
 }
 
 sub DESTROY {
-    local ($?, $!, $@);
-
     my $sftp = shift;
+    local ($?, $!, $@);
     my $dbpid = $sftp->{_disconnect_by_pid};
-
     $debug and $debug & 4 and _debug("$sftp->DESTROY called (current pid: $$, disconnect_by_pid: ".($dbpid||'').")");
-
     $sftp->disconnect if (!defined $dbpid or $dbpid == $$);
 }
 
 sub _init {
     my $sftp = shift;
-    $sftp->_queue_msg( Net::SFTP::Foreign::Buffer->new(int8 => SSH2_FXP_INIT,
-						       int32 => SSH2_FILEXFER_VERSION));
-
-    if (my $msg = $sftp->_get_msg) {
-	my $type = $msg->get_int8;
-	if ($type == SSH2_FXP_VERSION) {
-	    my $version = $msg->get_int32;
-
-	    $sftp->{server_version} = $version;
-            $sftp->{server_extensions} = {};
-            while (length $$msg) {
-                my $key = $msg->get_str;
-                my $value = $msg->get_str;
-                $sftp->{server_extensions}{$key} = $value;
-
-                if ($key eq 'vendor-id') {
-                    my $vid = Net::SFTP::Foreign::Buffer->make("$value");
-                    $sftp->{_ext__vendor_id} = [ Encode::decode(utf8 => $vid->get_str),
-                                                 Encode::decode(utf8 => $vid->get_str),
-                                                 Encode::decode(utf8 => $vid->get_str),
-                                                 $vid->get_int64 ];
-                }
-
-            }
-
-	    return $version;
-	}
-
-	$sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
-			  SFTP_ERR_REMOTE_BAD_MESSAGE,
-			  "bad packet type, expecting SSH2_FXP_VERSION, got $type");
-    }
-    elsif ($sftp->{_status} == SSH2_FX_CONNECTION_LOST
-	   and $sftp->{_password_authentication}
-	   and $sftp->{_password_sent}) {
-	$sftp->_set_error(SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED,
+    $sftp->_queue_msg_low(SSH2_FXP_INIT, uint32 => SSH2_FILEXFER_VERSION);
+    my $msg = $sftp->_get_msg;
+    unless (defined $msg) {
+        if ($sftp->{_status} == SSH2_FX_CONNECTION_LOST
+         and $sftp->{_password_authentication}
+         and $sftp->{_password_sent}) {
+            $sftp->_set_error(SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED,
 			  "Password authentication failed or connection lost");
+        }
+        return undef;
     }
-    return undef;
+
+    my $type = _buf_shift_uint8($msg);
+    if ($type != SSH2_FXP_VERSION) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
+                          SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          "bad packet type, expecting SSH2_FXP_VERSION, got $type");
+        return undef;
+
+    }
+
+    my $version = $sftp->{server_version} = _buf_shift_uint32($msg);
+    $sftp->{server_extensions} = {};
+    while (length $msg) {
+        my $key   = _buf_shift_str($msg);
+        my $value = _buf_shift_str($msg);
+        $sftp->{server_extensions}{$key} = $value;
+        if ($key eq 'vendor-id') {
+            $sftp->{server_extensions__vendor_id} = [ _buf_shift_utf8($value),
+                                                      _buf_shift_utf8($value),
+                                                      _buf_shift_utf8($value),
+                                                      _buf_shift_uint64($value) ];
+        }
+    }
+    return $version;
 }
 
 sub server_extensions { %{shift->{server_extensions}} }
@@ -373,47 +398,52 @@ sub _check_extension {
     return undef;
 }
 
-# helper methods:
 sub _get_msg_and_check {
     my ($sftp, $etype, $eid, $err, $errstr) = @_;
+    defined $eid or return undef;
+
     my $msg = $sftp->_get_msg;
-    if ($msg) {
-	my $type = $msg->get_int8;
-	my $id = $msg->get_int32;
+    defined $msg or return undef;
 
-	$sftp->_clear_error_and_status;
+    $sftp->_clear_error_and_status;
 
-	if ($id != $eid) {
-	    $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
-			      SFTP_ERR_REMOTE_BAD_MESSAGE,
-			      $errstr, "bad packet sequence, expected $eid, got $id");
-	    return undef;
-	}
+    my $type = _buf_shift_uint8($msg);
+    my $id = _buf_shift_uint32($msg);
 
-	if ($type != $etype) {
-	    if ($type == SSH2_FXP_STATUS) {
-                my $code = $msg->get_int32;
-                my $str = Encode::decode(utf8 => $msg->get_str);
-		my $status = $sftp->_set_status($code, (defined $str ? $str : ()));
-		$sftp->_set_error($err, $errstr, $status);
-	    }
-	    else {
-		$sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
-				  SFTP_ERR_REMOTE_BAD_MESSAGE,
-				  $errstr, "bad packet type, expected $etype packet, got $type");
-	    }
-	    return undef;
-	}
+    unless ($id == $eid) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
+                          SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          $errstr, "bad packet sequence, expected $eid, got $id");
+        return undef;
     }
-    $msg;
+
+    if ($type == SSH2_FXP_STATUS) {
+        my $code = _buf_shift_uint32($msg);
+        my $str = _buf_shift_utf8($msg);
+        my $status = $sftp->_set_status($code, (defined $str ? $str : ()));
+
+        $sftp->_set_error($err, $errstr, $status)
+            unless $etype == SSH2_FXP_STATUS and $status == SSH2_FX_OK;
+
+        return undef;
+    }
+
+    if ($type != $etype) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
+                          SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          $errstr, "bad packet type, expected $etype packet, got $type");
+        return undef;
+    }
+
+    return $msg;
 }
 
 # reads SSH2_FXP_HANDLE packet and returns handle, or undef on failure
 sub _get_handle {
     my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_HANDLE, $eid,
-					    $error, $errstr)) {
-	return $msg->get_str;
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_HANDLE, $eid,
+                                                    $error, $errstr))) {
+	return _buf_shift_str($msg);
     }
     return undef;
 }
@@ -442,9 +472,8 @@ sub _queue_rid_request {
     my ($sftp, $code, $fh, $attrs) = @_;
     my $rid = $sftp->_rid($fh);
     return undef unless defined $rid;
-
-    $sftp->_queue_new_msg($code, str => $rid,
-			 (defined $attrs ? (attr => $attrs) : ()));
+    $sftp->_queue_msg($code, str => $rid,
+                      (@_ == 4 ? (attrs => $attrs) : ()));
 }
 
 sub _queue_rfid_request {
@@ -457,22 +486,18 @@ sub _queue_rdid_request {
     &_queue_rid_request;
 }
 
-sub _queue_str_request {
-    my($sftp, $code, $str, $attrs) = @_;
-    $sftp->_queue_new_msg($code, str => $str,
-			 (defined $attrs ? (attr => $attrs) : ()));
+sub _queue_str_request { $_[0]->_queue_msg($_[1], str => $_[2]) }
+
+sub _queue_path_request {
+    my($sftp, $code, $path, $attrs) = @_;
+    $sftp->_queue_msg($code, abs_path => $path,
+                      (@_ == 4 ? (attrs => $attrs) : ()));
 }
 
 sub _check_status_ok {
-    my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_STATUS, $eid,
-					    $error, $errstr)) {
-	my $status = $sftp->_set_status($msg->get_int32, $msg->get_str);
-	return 1 if $status == SSH2_FX_OK;
-
-	$sftp->_set_error($error, $errstr, $status);
-    }
-    return undef;
+    my $sftp = shift;
+    $sftp->_get_msg_and_check(SSH2_FXP_STATUS, @_);
+    return !$sftp->{_error};
 }
 
 sub setcwd {
@@ -517,12 +542,9 @@ sub open {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $flags, $a) = @_;
-    $path = $sftp->_rel2abs($path);
     defined $flags or $flags = SSH2_FXF_READ;
-    defined $a or $a = Net::SFTP::Foreign::Attributes->new;
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_OPEN,
-                                   str => $sftp->_fs_encode($path),
-                                   int32 => $flags, attr => $a);
+    my $id = $sftp->_queue_msg(SSH2_FXP_OPEN,
+                               abs_path => $path, uint32 => $flags, attrs => $a);
 
     my $rid = $sftp->_get_handle($id,
 				SFTP_ERR_REMOTE_OPEN_FAILED,
@@ -551,10 +573,8 @@ sub opendir {
     @_ == 2 or croak 'Usage: $sftp->opendir($path)';
     ${^TAINT} and &_catch_tainted_args;
 
-    my $sftp = shift;
-    my $path = shift;
-    $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_str_request(SSH2_FXP_OPENDIR, $sftp->_fs_encode($path), @_);
+    my ($sftp, $path) = @_;
+    my $id = $sftp->_queue_path_request(SSH2_FXP_OPENDIR, $path);
     my $rid = $sftp->_get_handle($id, SFTP_ERR_REMOTE_OPENDIR_FAILED,
 				 "Couldn't open remote dir '$path'");
 
@@ -585,13 +605,13 @@ sub sftpread {
     my $rfid = $sftp->_rfid($rfh);
     defined $rfid or return undef;
 
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_READ, str=> $rfid,
-				  int64 => $offset, int32 => $size);
+    my $id = $sftp->_queue_msg(SSH2_FXP_READ, str=> $rfid,
+                               uint64 => $offset, uint32 => $size);
 
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_DATA, $id,
-					    SFTP_ERR_REMOTE_READ_FAILED,
-					    "Couldn't read from remote file")) {
-	return $msg->get_str;
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_DATA, $id,
+                                                    SFTP_ERR_REMOTE_READ_FAILED,
+                                                    "Couldn't read from remote file"))) {
+	return _buf_shift_str($msg);
     }
     return undef;
 }
@@ -606,8 +626,8 @@ sub sftpwrite {
     defined $rfid or return undef;
     utf8::downgrade($_[3], 1) or croak "wide characters found in data";
 
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
-				  int64 => $offset, str => $_[3]);
+    my $id = $sftp->_queue_msg(SSH2_FXP_WRITE, str => $rfid,
+                               uint64 => $offset, str => $_[3]);
 
     if ($sftp->_check_status_ok($id,
 				SFTP_ERR_REMOTE_WRITE_FAILED,
@@ -679,8 +699,8 @@ sub _write {
 	while (!$end and @msgid < $qsize) {
 	    my $data = $cb->();
 	    if (defined $data and length $data) {
-		my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
-					      int64 => $off + $written, str => $data);
+		my $id = $sftp->_queue_msg(SSH2_FXP_WRITE, str => $rfid,
+                                           uint64 => $off + $written, str => $data);
 		push @written, $written;
 		$written += length $data;
 		push @msgid, $id;
@@ -740,9 +760,9 @@ sub flush {
 	    my $start;
 	    my $append = $rfh->_flag('append');
 	    if ($append) {
-		my $attr = $sftp->fstat($rfh)
+		my $attrs = $sftp->fstat($rfh)
 		    or return undef;
-		$start = $attr->size;
+		$start = $attrs->size;
 	    }
 	    else {
 		$start = $rfh->_pos;
@@ -797,8 +817,8 @@ sub _fill_read_cache {
 
     while (!defined $len or length $$bin < $len) {
 	while ((!defined $len or $askoff < $len) and @msgid < $qsize) {
-	    my $id = $sftp->_queue_new_msg(SSH2_FXP_READ, str=> $rfid,
-					  int64 => $pos + $askoff, int32 => $bsize);
+	    my $id = $sftp->_queue_msg(SSH2_FXP_READ, str=> $rfid,
+                                       uint64 => $pos + $askoff, uint32 => $bsize);
 	    push @msgid, $id;
 	    $askoff += $bsize;
 	}
@@ -809,12 +829,12 @@ sub _fill_read_cache {
 					    "Couldn't read from remote file")
 	    or last;
 
-	my $data = $msg->get_str;
+	my $data = _buf_shift_str($msg);
 	$$bin .= $data;
 	if (length $data < $bsize) {
 	    unless (defined $len) {
-		$eof = $sftp->_queue_new_msg(SSH2_FXP_READ, str=> $rfid,
-					     int64 => $pos + length $$bin, int32 => 1);
+		$eof = $sftp->_queue_msg(SSH2_FXP_READ, str=> $rfid,
+                                         uint64 => $pos + length $$bin, uint32 => 1);
 	    }
 	    last;
 	}
@@ -922,6 +942,73 @@ sub getc {
     return undef;
 }
 
+sub _buf_shift_attrs {
+    my $sftp = shift;
+    my $a = Net::SFTP::Foreign::Attributes->new;
+    my $flags = _buf_shift_uint32($_[0]);
+    if ($flags & SSH2_FILEXFER_ATTR_SIZE) {
+        $a->set_size(_untaint(_buf_shift_uint64($_[0])));
+    }
+    if ($flags & SSH2_FILEXFER_ATTR_UIDGID) {
+        $a->set_ugid(_untaint(_buf_shift_uint32($_[0])),
+                     _untaint(_buf_shift_uint32($_[0])));
+    }
+    if ($flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
+        $a->set_perm(_untaint(_buf_shift_uint32($_[0])));
+    }
+    if ($flags & SSH2_FILEXFER_ATTR_ACMODTIME) {
+        $a->set_amtime(_untaint(_buf_shift_uint32($_[0])),
+                       _untaint(_buf_shift_uint32($_[0])));
+    }
+    if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
+        my $n = _buf_shift_uint32($_[0]);
+        my @ext;
+        for (0 .. $n - 1) {
+            my $key = _buf_get_str($_[0]);
+            my $value = _buf_get_str($_[0]);
+            unless (defined $key and defined $value) {
+                $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE, SFTP_ERR_REMOTE_BAD_MESSAGE,
+                                  "attribute extensions missing from packet");
+                return;
+            }
+            push @ext, $key, $value;
+        }
+        $a->{extended} = \@ext;
+    }
+    return $a;
+}
+
+sub _buf_skip_attrs {
+    my $sftp = shift;
+    my $flags = _buf_shift_uint32($_[0]);
+    my $skip = 0;
+    $skip += 8 if $flags & SSH2_FILEXFER_ATTR_SIZE;
+    $skip += 8 if $flags & SSH2_FILEXFER_ATTR_UIDGID;
+    $skip += 4 if $flags & SSH2_FILEXFER_ATTR_PERMISSIONS;
+    $skip += 8 if $flags & SSH2_FILEXFER_ATTR_ACMODTIME;
+    _buf_skip_bytes($_[0], $skip);
+    if ($flags & SSH2_FILEXFER_ATTR_EXTENDED) {
+        my $n = _buf_shift_uint32($_[0]);
+        for (1 .. 2 * $n) {
+            last unless length $_[0];
+            _buf_shift_str($_[0]);
+        }
+    }
+}
+
+sub _buf_shift_path {
+    my $sftp = shift;
+    my $str = _buf_shift_str($_[0]);
+    unless (defined $str) {
+        $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE, SFTP_ERR_REMOTE_BAD_MESSAGE,
+                          "path string missing from packet");
+        return;
+    }
+    Encode::decode($sftp->{_fs_encoding}, $str);
+}
+
+
+
 sub _gen_stat_method {
     my ($code, $error, $errstr) = @_;
     return sub {
@@ -929,11 +1016,10 @@ sub _gen_stat_method {
         ${^TAINT} and &_catch_tainted_args;
 
 	my ($sftp, $path) = @_;
-        $path = $sftp->_rel2abs($path);
-	my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
-						$error, $errstr)) {
-	    return $msg->get_attributes;
+	my $id = $sftp->_queue_path_request($code, $path);
+	if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
+                                                        $error, $errstr))) {
+            return $sftp->_buf_shift_attrs($msg);
 	}
 	return undef;
     };
@@ -957,10 +1043,10 @@ sub fstat {
     my $sftp = shift;
     my $id = $sftp->_queue_rfid_request(SSH2_FXP_FSTAT, @_);
     defined $id or return undef;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
-					    SFTP_ERR_REMOTE_STAT_FAILED,
-					    "Couldn't stat remote file (fstat)")) {
-	return $msg->get_attributes;
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
+                                                    SFTP_ERR_REMOTE_STAT_FAILED,
+                                                    "Couldn't stat remote file (fstat)"))) {
+        return $sftp->_buf_shift_attrs($msg)
     }
     return undef;
 }
@@ -975,10 +1061,9 @@ sub _gen_remove_method {
         ${^TAINT} and &_catch_tainted_args;
 
         my ($sftp, $path) = @_;
-        $path = $sftp->_rel2abs($path);
-        my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
-        return $sftp->_check_status_ok($id, $error, $errstr);
-    };
+        my $id = $sftp->_queue_path_request($code, $path);
+        $sftp->_check_status_ok($id, $error, $errstr);
+    }
 }
 
 *remove = _gen_remove_method(SSH2_FXP_REMOVE,
@@ -999,14 +1084,10 @@ sub mkdir {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $attrs) = @_;
-    $attrs = _empty_attributes unless defined $attrs;
-    $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_str_request(SSH2_FXP_MKDIR,
-                                       $sftp->_fs_encode($path),
-                                       $attrs);
-    return $sftp->_check_status_ok($id,
-                                   SFTP_ERR_REMOTE_MKDIR_FAILED,
-                                   "Couldn't create remote directory");
+    my $id = $sftp->_queue_path_request(SSH2_FXP_MKDIR, $path, $attrs);
+    $sftp->_check_status_ok($id,
+                            SFTP_ERR_REMOTE_MKDIR_FAILED,
+                            "Couldn't create remote directory");
 }
 
 sub join {
@@ -1093,13 +1174,10 @@ sub setstat {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path, $attrs) = @_;
-    $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_str_request(SSH2_FXP_SETSTAT,
-                                       $sftp->_fs_encode($path),
-                                       $attrs);
-    return $sftp->_check_status_ok($id,
-                                   SFTP_ERR_REMOTE_SETSTAT_FAILED,
-                                   "Couldn't setstat remote file (setstat)'");
+    my $id = $sftp->_queue_path_request(SSH2_FXP_SETSTAT, $path, $attrs);
+    $sftp->_check_status_ok($id,
+                            SFTP_ERR_REMOTE_SETSTAT_FAILED,
+                            "Couldn't setstat remote file (setstat)'");
 }
 
 ## SSH2_FXP_CLOSE (4), SSH2_FXP_FSETSTAT (10)
@@ -1179,15 +1257,21 @@ sub readdir {
 
     while (!@$cache or wantarray) {
 	my $id = $sftp->_queue_str_request(SSH2_FXP_READDIR, $rdid);
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
-						SFTP_ERR_REMOTE_READDIR_FAILED,
-						"Couldn't read remote directory" )) {
-	    my $count = $msg->get_int32 or last;
+	if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
+                                                        SFTP_ERR_REMOTE_READDIR_FAILED,
+                                                        "Couldn't read remote directory"))) {
+	    my $count = _buf_shift_uint32($msg) or last;
 
 	    for (1..$count) {
-		push @$cache, { filename => $sftp->_fs_decode($msg->get_str),
-				longname => $sftp->_fs_decode($msg->get_str),
-				a => $msg->get_attributes };
+                my $filename = $sftp->_buf_shift_path($msg);
+                my $longname = $sftp->_buf_shift_path($msg);
+                my $a = $sftp->_buf_shift_attrs($msg);
+
+                $sftp->{_error} and last;
+
+                push @$cache, { filename => $filename,
+                                longname => $longname,
+				a => $a };
 	    }
 	}
 	else {
@@ -1197,9 +1281,9 @@ sub readdir {
     }
 
     if (wantarray) {
-	my $old = $cache;
-	$cache = [];
-	return @$old;
+	my @old = @$cache;
+	@$cache = ();
+	return @old;
     }
     shift @$cache;
 }
@@ -1207,13 +1291,11 @@ sub readdir {
 sub _readdir {
     my ($sftp, $rdh);
     if (wantarray) {
-	my $line = $sftp->readdir($rdh);
-	if (defined $line) {
-	    return $line->{filename};
-	}
+	my $line = $sftp->readdir($rdh) or return undef;
+	return $line->{filename};
     }
     else {
-	return map { $_->{filename} } $sftp->readdir($rdh);
+        return map { $_->{filename} } $sftp->readdir($rdh);
     }
 }
 
@@ -1224,14 +1306,12 @@ sub _gen_getpath_method {
         ${^TAINT} and &_catch_tainted_args;
 
 	my ($sftp, $path) = @_;
-	$path = $sftp->_rel2abs($path);
-	my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
-
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
-						$error,
-						"Couldn't get $name for remote '$path'")) {
-	    $msg->get_int32 > 0
-		and return $sftp->_fs_decode($msg->get_str);
+	my $id = $sftp->_queue_path_request($code, $path);
+	if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
+                                                        $error,
+                                                        "Couldn't get $name for remote '$path'"))) {
+	    _buf_shift_uint32($msg) > 0
+		and return $sftp->_buf_shift_path($msg);
 
 	    $sftp->_set_error($error,
 			      "Couldn't get $name for remote '$path', no names on reply")
@@ -1255,13 +1335,9 @@ sub _gen_getpath_method {
 
 sub _rename {
     my ($sftp, $old, $new) = @_;
-
-    $old = $sftp->_rel2abs($old);
-    $new = $sftp->_rel2abs($new);
-
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_RENAME,
-                                   str => $sftp->_fs_encode($old),
-                                   str => $sftp->_fs_encode($new));
+    my $id = $sftp->_queue_msg(SSH2_FXP_RENAME,
+                               abs_path => $old,
+                               abs_path => $new);
 
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
@@ -1310,24 +1386,27 @@ sub rename {
     $sftp->_ok_or_autodie;
 }
 
+sub _queue_extended_msg {
+    my $sftp = shift;
+    my $extension = shift;
+    my $version = shift;
+    my $error = shift;
+    my $error_str = shift;
+    $sftp->_check_extension($extension, $version, $error, $error_str) and
+        $sftp->_queue_msg(SSH2_FXP_EXTENDED, str => $extension, @_);
+}
+
 sub atomic_rename {
     @_ == 3 or croak 'Usage: $sftp->atomic_rename($old, $new)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $old, $new) = @_;
 
-    $sftp->_check_extension('posix-rename@openssh.com' => 1,
-                             SFTP_ERR_REMOTE_RENAME_FAILED,
-                            "atomic rename failed")
-        or return undef;
-
-    $old = $sftp->_rel2abs($old);
-    $new = $sftp->_rel2abs($new);
-
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
-                                   str => 'posix-rename@openssh.com',
-                                   str => $sftp->_fs_encode($old),
-                                   str => $sftp->_fs_encode($new));
+    my $id = $sftp->_queue_extended_msg('posix-rename@openssh.com' => 1,
+                                        SFTP_ERR_REMOTE_RENAME_FAILED,
+                                        "atomic rename failed",
+                                        abs_path => $old,
+                                        abs_path => $new);
 
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
@@ -1340,11 +1419,9 @@ sub symlink {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $sl, $target) = @_;
-    $sl = $sftp->_rel2abs($sl);
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_SYMLINK,
-                                   str => $sftp->_fs_encode($target),
-                                   str => $sftp->_fs_encode($sl));
-
+    my $id = $sftp->_queue_msg(SSH2_FXP_SYMLINK,
+                               path => $target,
+                               abs_path => $sl);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_SYMLINK_FAILED,
                             "Couldn't create symlink '$sl' pointing to '$target'");
 }
@@ -1355,17 +1432,11 @@ sub hardlink {
 
     my ($sftp, $hl, $target) = @_;
 
-    $sftp->_check_extension('hardlink@openssh.com' => 1,
-                            SFTP_ERR_REMOTE_HARDLINK_FAILED,
-                            "hardlink failed")
-        or return undef;
-    $hl = $sftp->_rel2abs($hl);
-    $target = $sftp->_rel2abs($target);
-
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
-                                   str => 'hardlink@openssh.com',
-                                   str => $sftp->_fs_encode($target),
-                                   str => $sftp->_fs_encode($hl));
+    my $id = $sftp->_queue_extended_msg('hardlink@openssh.com' => 1,
+                                        SFTP_ERR_REMOTE_HARDLINK_FAILED,
+                                        "hardlink failed",
+                                        abs_path => $target,
+                                        abs_path => $hl);
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_HARDLINK_FAILED,
                             "Couldn't create hardlink '$hl' pointing to '$target'");
 }
@@ -1623,8 +1694,8 @@ sub get {
             # request a new block if queue is not full
             while (!@msgid or (($size == -1 or $size > $askoff) and @msgid < $queue_size and $n != 1)) {
 
-                my $id = $sftp->_queue_new_msg(SSH2_FXP_READ, str=> $rfid,
-                                               int64 => $askoff, int32 => $block_size);
+                my $id = $sftp->_queue_msg(SSH2_FXP_READ, str=> $rfid,
+                                           uint64 => $askoff, uint32 => $block_size);
                 push @msgid, $id;
                 push @askoff, $askoff;
                 $askoff += $block_size;
@@ -1646,7 +1717,7 @@ sub get {
                 last;
             }
 
-            my $data = $msg->get_str;
+            my $data = _buf_shift_str($msg);
             my $len = length $data;
 
             if ($roff != $loff or !$len) {
@@ -1803,9 +1874,6 @@ sub get_content {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $name) = @_;
-    $name = $sftp->_rel2abs($name);
-    my @data;
-
     my $rfh = $sftp->open($name)
 	or return undef;
 
@@ -2189,8 +2257,8 @@ sub put {
                     $debug and $debug & 16384 and
                         _debug "writing block at offset $writeoff, length " . length($data);
 
-                    my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
-                                                   int64 => $writeoff, str => $data);
+                    my $id = $sftp->_queue_msg(SSH2_FXP_WRITE, str => $rfid,
+                                               uint64 => $writeoff, str => $data);
                     push @msgid, $id;
                     $writeoff = $nextoff;
                 }
@@ -2315,25 +2383,24 @@ sub ls {
                 while (@msgid < $queue_size);
 
             my $id = shift @msgid;
-            if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
-                                                    SFTP_ERR_REMOTE_READDIR_FAILED,
-                                                    "Couldn't read directory '$dir'" )) {
-                my $count = $msg->get_int32 or last;
+            if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
+                                                            SFTP_ERR_REMOTE_READDIR_FAILED,
+                                                            "Couldn't read directory '$dir'"))) {
+                my $count = _buf_shift_uint32($msg) or last;
 
                 if ($cheap) {
                     for (1..$count) {
-                        my $fn = $sftp->_fs_decode($msg->get_str);
+                        my $fn = $sftp->_buf_shift_path($msg);
                         push @dir, $fn if (!defined $cheap_wanted or $fn =~ $cheap_wanted);
-                        $msg->skip_str;
-                        Net::SFTP::Foreign::Attributes->skip_from_buffer($msg);
+                        _buf_shift_str($msg);
+                        $sftp->_buf_skip_attrs($msg);
                     }
                 }
                 else {
                     for (1..$count) {
-                        my $fn = $sftp->_fs_decode($msg->get_str);
-                        my $ln = $sftp->_fs_decode($msg->get_str);
-                        # my $a = $msg->get_attributes;
-                        my $a = Net::SFTP::Foreign::Attributes->new_from_buffer($msg);
+                        my $fn = $sftp->_buf_shift_path($msg);
+                        my $ln = $sftp->_buf_shift_path($msg);
+                        my $a = $sftp->_buf_shift_attrs($msg);
 
                         my $entry =  { filename => $fn,
                                        longname => $ln,
@@ -2950,12 +3017,11 @@ sub mput {
 
 sub _get_statvfs {
     my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
-                                            $eid, $error, $errstr)) {
-        # printf STDERR "msg length: %i\n", length $$msg;
-        my %statvfs = map { $_ => $msg->get_int64 } qw(bsize frsize blocks
-                                                       bfree bavail files ffree
-                                                       favail fsid flag namemax);
+    if (defined(my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
+                                                    $eid, $error, $errstr))) {
+        my %statvfs = map { $_ => _buf_shift_uint64($msg) } qw(bsize frsize blocks
+                                                              bfree bavail files ffree
+                                                              favail fsid flag namemax);
         return \%statvfs;
     }
     return undef;
@@ -2966,15 +3032,10 @@ sub statvfs {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path) = @_;
-    $sftp->_check_extension('statvfs@openssh.com' => 2,
-                            SFTP_ERR_REMOTE_STATVFS_FAILED,
-                            "statvfs failed")
-        or return undef;
-
-    $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
-                                   str => 'statvfs@openssh.com',
-                                   str => $sftp->_fs_encode($path));
+    my $id = $sftp->_queue_extended_msg('statvfs@openssh.com' => 2,
+                                        SFTP_ERR_REMOTE_STATVFS_FAILED,
+                                        "statvfs failed",
+                                        abs_path => $path);
     $sftp->_get_statvfs($id,
                         SFTP_ERR_REMOTE_STATVFS_FAILED,
                         "Couldn't stat remote file system");
@@ -2985,15 +3046,11 @@ sub fstatvfs {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $fh) = @_;
-    $sftp->_check_extension('fstatvfs@openssh.com' => 2,
-                            SFTP_ERR_REMOTE_FSTATVFS_FAILED,
-                            "fstatvfs failed")
-        or return undef;
-
     my $rid = $sftp->_rid($fh);
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
-                                   str => 'fstatvfs@openssh.com',
-                                   str => $rid);
+    my $id = $sftp->_queue_extended_msg('fstatvfs@openssh.com' => 2,
+                                        SFTP_ERR_REMOTE_FSTATVFS_FAILED,
+                                        "fstatvfs failed",
+                                        str => $rid);
     $sftp->_get_statvfs($id,
                         SFTP_ERR_REMOTE_FSTATVFS_FAILED,
                         "Couldn't stat remote file system");
