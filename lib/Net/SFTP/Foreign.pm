@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.71';
+our $VERSION = '1.72_01';
 
 use strict;
 use warnings;
@@ -3482,7 +3482,9 @@ support in the interpreter.
 
 =item key_path =E<gt> $filename
 
-asks C<ssh> to use the key in the given file for authentication.
+=item key_path =E<gt> \@filenames
+
+asks C<ssh> to use the key(s) in the given file(s) for authentication.
 
 =item password =E<gt> $password
 
@@ -3492,6 +3494,23 @@ password.
 Password authentication is only available if the module L<IO::Pty> is
 installed. Note also, that on Windows this module is only available
 when running the Cygwin port of Perl.
+
+=item asks_for_username_at_login =E<gt> 0|'auto'|1
+
+During the interactive authentication dialog, most SSH servers only
+ask for the user password as the login name is passed inside the SSH
+protocol. But under some uncommon servers or configurations it is
+possible that a username is also requested.
+
+When this flag is set to C<1>, the username will be send
+inconditionally at the first remote prompt and then the password at
+the second.
+
+When it is set to C<auto> the module will use some heuristics in order
+to determine if it is being asked for an username.
+
+When set to C<0>, the username will never be sent during the
+authentication dialog. This is the default.
 
 =item passphrase =E<gt> $passphrase
 

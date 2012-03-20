@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.72_01  Mar 20, 2012
+        - add support for asks_for_username_at_login feature (feature
+          request by Horea Gligan)
+        - key_path now can accept an array
+
 1.71  Mar 14, 2012
         - release as stable
         - add support for vendor-id extension

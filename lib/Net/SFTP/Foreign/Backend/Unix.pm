@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.70_08';
+our $VERSION = '1.72_01';
 
 use strict;
 use warnings;
@@ -125,7 +125,9 @@ sub _init_transport {
         }
     }
     else {
+        my $user = delete $opts->{user};
         my $pass = delete $opts->{passphrase};
+        my $asks_for_username_at_login;
 	my $pass_is_passphrase;
         if (defined $pass) {
             $pass_is_passphrase = 1;
@@ -133,6 +135,9 @@ sub _init_transport {
         else {
             $pass = delete $opts->{password};
 	    defined $pass and $sftp->{_password_authentication} = 1;
+            $asks_for_username_at_login = $sftp->{_asks_for_username_at_login} = delete $opts->{asks_for_username_at_login};
+            croak "asks_for user is set but user was not given"
+                if $asks_for_username_at_login and not defined $user;
         }
 
         my $expect_log_user = delete $opts->{expect_log_user} || 0;
@@ -162,7 +167,6 @@ sub _init_transport {
             }
 
             my $port = delete $opts->{port};
-            my $user = delete $opts->{user};
 	    my $ssh1 = delete $opts->{ssh1};
 
             my $more = delete $opts->{more};
@@ -172,8 +176,8 @@ sub _init_transport {
 
             my @preferred_authentications;
             if (defined $key_path) {
-                push @preferred_authentications, 'publickey' if defined $key_path;
-                push @open2_cmd, -i => $key_path;
+                push @preferred_authentications, 'publickey';
+                push @open2_cmd, map { -i => $_ } _ensure_list $key_path;
             }
 
             if ($ssh_cmd_interface eq 'plink') {
@@ -256,8 +260,9 @@ sub _init_transport {
             $debug and $debug & 65536 and _debug "starting password authentication";
             my $rv = '';
             vec($rv, fileno($pty), 1) = 1;
-            my $buffer;
+            my $buffer = '';
             my $at = 0;
+            my $password_sent;
             my $start_time = time;
             while(1) {
                 if (defined $sftp->{_timeout}) {
@@ -291,22 +296,31 @@ sub _init_transport {
                                             "'~/.ssh/known_hosts' file");
                         return;
                     }
-                    if ($at == 0) {
-                        $debug and $debug & 65536 and _debug "looking for password prompt";
-                        if ($buffer =~ /[:?]\s*$/) {
-                            $debug and $debug & 65536 and _debug "sending password";
-                            print $pty "$pass\n";
-                            $at = length $buffer;
-                        }
-                    }
-                    else {
+                    if ($password_sent) {
                         $debug and $debug & 65536 and _debug "looking for password ok";
                         last if substr($buffer, $at) =~ /\n$/;
+                    }
+                    else {
+                        $debug and $debug & 65536 and _debug "looking for user/password prompt";
+                        if (substr($buffer, $at) =~ /(user|name|login)?[:?]\s*$/) {
+                            if ($asks_for_username_at_login and
+                                ($asks_for_username_at_login ne 'auto' or defined $1)) {
+                                $debug and $debug & 65536 and _debug "sending username";
+                                print $pty "$user\n";
+                                undef $asks_for_username_at_login;
+                            }
+                            else {
+                                $debug and $debug & 65536 and _debug "sending password";
+                                print $pty "$pass\n";
+                                $password_sent = 1;
+                            }
+                            $at = length $buffer;
+                        }
                     }
                 }
                 else {
                     $debug and $debug & 65536 and _debug "no data available from pty, delaying until next read";
-                    sleep 0.2;
+                    sleep 0.1;
                 }
 
             }
