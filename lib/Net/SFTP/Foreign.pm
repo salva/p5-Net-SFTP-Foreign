@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.72_01';
+our $VERSION = '1.72_02';
 
 use strict;
 use warnings;
@@ -54,6 +54,8 @@ BEGIN {
 	$dirty_cleanup = 1 unless defined $dirty_cleanup;
     }
 }
+
+my %deprecated;
 
 sub _next_msg_id { shift->{_msg_id}++ }
 
@@ -465,12 +467,14 @@ sub _queue_str_request {
 
 sub _check_status_ok {
     my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_STATUS, $eid,
-					    $error, $errstr)) {
-	my $status = $sftp->_set_status($msg->get_int32, $msg->get_str);
-	return 1 if $status == SSH2_FX_OK;
+    if (defined $eid) {
+        if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_STATUS, $eid,
+                                                $error, $errstr)) {
+            my $status = $sftp->_set_status($msg->get_int32, $msg->get_str);
+            return 1 if $status == SSH2_FX_OK;
 
-	$sftp->_set_error($error, $errstr, $status);
+            $sftp->_set_error($error, $errstr, $status);
+        }
     }
     return undef;
 }
@@ -633,7 +637,7 @@ sub seek {
 	return $rfh->_inc_pos($pos)
     }
     elsif ($whence == 2) {
-	if (my $a = $sftp->fstat($rfh)) {
+	if (my $a = $sftp->stat($rfh)) {
 	    return $rfh->_pos($pos + $a->size);
 	}
 	else {
@@ -740,7 +744,7 @@ sub flush {
 	    my $start;
 	    my $append = $rfh->_flag('append');
 	    if ($append) {
-		my $attr = $sftp->fstat($rfh)
+		my $attr = $sftp->stat($rfh)
 		    or return undef;
 		$start = $attr->size;
 	    }
@@ -922,56 +926,51 @@ sub getc {
     return undef;
 }
 
-sub _gen_stat_method {
-    my ($code, $error, $errstr) = @_;
-    return sub {
-	@_ == 2 or croak 'Usage: $sftp->stat|lstat($path)';
-        ${^TAINT} and &_catch_tainted_args;
-
-	my ($sftp, $path) = @_;
-        $path = $sftp->_rel2abs($path);
-	my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
-	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
-						$error, $errstr)) {
-	    return $msg->get_attributes;
-	}
-	return undef;
-    };
-}
-
 ## SSH2_FXP_LSTAT (7), SSH2_FXP_FSTAT (8), SSH2_FXP_STAT (17)
 # these all return a Net::SFTP::Foreign::Attributes object on success, undef on failure
 
-*lstat = _gen_stat_method(SSH2_FXP_LSTAT,
-			  SFTP_ERR_REMOTE_LSTAT_FAILED,
-			  "Couldn't stat remote file (lstat)");
-
-*stat = _gen_stat_method(SSH2_FXP_STAT,
-			 SFTP_ERR_REMOTE_FSTAT_FAILED,
-			 "Couldn't stat remote file (stat)");
-
-sub fstat {
-    @_ == 2 or croak 'Usage: $sftp->fstat($fh)';
+sub lstat {
+    @_ == 2 or croak 'Usage: $sftp->lstat($path)';
     ${^TAINT} and &_catch_tainted_args;
 
-    my $sftp = shift;
-    my $id = $sftp->_queue_rfid_request(SSH2_FXP_FSTAT, @_);
-    defined $id or return undef;
+    my ($sftp, $path) = @_;
+    $path = $sftp->_rel2abs($path);
+    my $id = $sftp->_queue_str_request(SSH2_FXP_LSTAT, $sftp->_fs_encode($path));
     if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
-					    SFTP_ERR_REMOTE_STAT_FAILED,
-					    "Couldn't stat remote file (fstat)")) {
-	return $msg->get_attributes;
+                                            SFTP_ERR_REMOTE_LSTAT_FAILED, "Couldn't stat remote link")) {
+        return $msg->get_attributes;
     }
     return undef;
+}
+
+sub stat {
+    @_ == 2 or croak 'Usage: $sftp->stat($path_or_fh)';
+    ${^TAINT} and &_catch_tainted_args;
+
+    my ($sftp, $pofh) = @_;
+    my $id = $sftp->_queue_new_msg( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle'))
+                                    ? ( SSH2_FXP_FSTAT, str => $sftp->_rid($pofh))
+                                    : ( SSH2_FXP_STAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh))) );
+    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
+                                            SFTP_ERR_REMOTE_STAT_FAILED, "Couldn't stat remote file")) {
+        return $msg->get_attributes;
+    }
+    return undef;
+}
+
+sub fstat {
+    warn "fstat is deprecated and will be removed on the upcomming 2.xx series, "
+        . "stat method accepts now both file handlers and paths" unless $deprecated{fstat}++;
+    goto &fstat;
 }
 
 ## SSH2_FXP_RMDIR (15), SSH2_FXP_REMOVE (13)
 # these return true on success, undef on failure
 
 sub _gen_remove_method {
-    my($code, $error, $errstr) = @_;
-    return sub {
-	@_ == 2 or croak 'Usage: $sftp->remove|rmdir($path)';
+    my($name, $code, $error, $errstr) = @_;
+    my $sub = sub {
+	@_ == 2 or croak "Usage: \$sftp->$name(\$path)";
         ${^TAINT} and &_catch_tainted_args;
 
         my ($sftp, $path) = @_;
@@ -979,16 +978,14 @@ sub _gen_remove_method {
         my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
         return $sftp->_check_status_ok($id, $error, $errstr);
     };
+    no strict 'refs';
+    *$name = $sub;
 }
 
-*remove = _gen_remove_method(SSH2_FXP_REMOVE,
-			     SFTP_ERR_REMOTE_REMOVE_FAILED,
-			     "Couldn't delete remote file");
-
-*rmdir = _gen_remove_method(SSH2_FXP_RMDIR,
-			    SFTP_ERR_REMOTE_RMDIR_FAILED,
-			    "Couldn't remove remote directory");
-
+_gen_remove_method(remove => SSH2_FXP_REMOVE,
+                   SFTP_ERR_REMOTE_REMOVE_FAILED, "Couldn't delete remote file");
+_gen_remove_method(rmdir => SSH2_FXP_RMDIR,
+                   SFTP_ERR_REMOTE_RMDIR_FAILED, "Couldn't remove remote directory");
 
 ## SSH2_FXP_MKDIR (14), SSH2_FXP_SETSTAT (9)
 # these return true on success, undef on failure
@@ -1089,34 +1086,60 @@ sub mkpath {
 
 
 sub setstat {
-    @_ == 3 or croak 'Usage: $sftp->setstat($str, $attrs)';
+    @_ == 3 or croak 'Usage: $sftp->setstat($path_or_fh, $attrs)';
     ${^TAINT} and &_catch_tainted_args;
 
-    my ($sftp, $path, $attrs) = @_;
-    $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_str_request(SSH2_FXP_SETSTAT,
-                                       $sftp->_fs_encode($path),
-                                       $attrs);
+    my ($sftp, $pofh, $attrs) = @_;
+    my $id = $sftp->_queue_new_msg( ( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle') )
+                                      ? ( SSH2_FXP_FSETSTAT, str => $sftp->_rid($pofh) )
+                                      : ( SSH2_FXP_SETSTAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh)) ) ),
+                                    attr => $attrs );
     return $sftp->_check_status_ok($id,
                                    SFTP_ERR_REMOTE_SETSTAT_FAILED,
-                                   "Couldn't setstat remote file (setstat)'");
+                                   "Couldn't setstat remote file");
 }
 
 ## SSH2_FXP_CLOSE (4), SSH2_FXP_FSETSTAT (10)
 # these return true on success, undef on failure
 
 sub fsetstat {
-    @_ == 3 or croak 'Usage: $sftp->fsetstat($fh, $attrs)';
-    ${^TAINT} and &_catch_tainted_args;
+    warn "fsetstat is deprecated and will be removed on the upcomming 2.xx series, "
+        . "setstat method accepts now both file handlers and paths" unless $deprecated{fsetstat}++;
 
-    my $sftp = shift;
-    my $id = $sftp->_queue_rid_request(SSH2_FXP_FSETSTAT, @_);
-    defined $id or return undef;
-
-    return $sftp->_check_status_ok($id,
-                                   SFTP_ERR_REMOTE_FSETSTAT_FAILED,
-                                   "Couldn't setstat remote file (fsetstat)");
+    goto &setstat;
 }
+
+sub _gen_setstat_shortcut {
+    my ($name, $rid_type, $attrs_flag, @arg_types) = @_;
+    my $nargs = 2 + @arg_types;
+    my $usage = ("\$sftp->$name("
+                 . CORE::join(', ', '$path_or_fh', map "arg$_", 1..@arg_types)
+                 . ')');
+    my $rid_method = ($rid_type eq 'file' ? '_rfid' :
+                      $rid_type eq 'dir'  ? '_rdid' :
+                      $rid_type eq 'any'  ? '_rid'  :
+                      croak "bad rid type $rid_type");
+    my $sub = sub {
+        @_ == $nargs or croak $usage;
+        my $sftp = shift;
+        my $pofh = shift;
+        my $id = $sftp->_queue_new_msg( ( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle') )
+                                          ? ( SSH2_FXP_FSETSTAT, str => $sftp->$rid_method($pofh) )
+                                          : ( SSH2_FXP_SETSTAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh)) ) ),
+                                        int32 => $attrs_flag,
+                                        map { $arg_types[$_] => $_[$_] } 0..$#arg_types );
+        $sftp->_check_status_ok($id,
+                                SFTP_ERR_REMOTE_SETSTAT_FAILED,
+                                "Couldn't setstat remote file ($name)");
+    };
+    no strict 'refs';
+    *$name = $sub;
+}
+
+_gen_setstat_shortcut(truncate => 'file', SSH2_FILEXFER_ATTR_SIZE,        'int64');
+_gen_setstat_shortcut(chown    => 'any' , SSH2_FILEXFER_ATTR_UIDGID,      'int32', 'int32');
+_gen_setstat_shortcut(chmod    => 'any' , SSH2_FILEXFER_ATTR_PERMISSIONS, 'int32');
+_gen_setstat_shortcut(utime    => 'any' , SSH2_FILEXFER_ATTR_ACMODTIME,   'int32', 'int32');
 
 sub _close {
     @_ == 2 or croak 'Usage: $sftp->close($fh, $attrs)';
@@ -1379,6 +1402,7 @@ sub _gen_save_status_method {
     }
 }
 
+
 *_close_save_status = _gen_save_status_method('close');
 *_closedir_save_status = _gen_save_status_method('closedir');
 *_remove_save_status = _gen_save_status_method('remove');
@@ -1587,7 +1611,7 @@ sub get {
             my $error;
 	    do {
                 local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-                unless (eval { chmod($perm, $local) > 0 }) {
+                unless (eval { CORE::chmod($perm, $local) > 0 }) {
                     $error = ($@ ? $@ : $!);
                 }
             };
@@ -1845,6 +1869,7 @@ sub put {
     my $atomic = delete $opts{atomic};
     my $cleanup = delete $opts{cleanup};
     my $best_effort = delete $opts{best_effort};
+    my $sparse = delete $opts{sparse};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -2098,6 +2123,8 @@ sub put {
     # Once this point is reached and for the remaining of the sub,
     # code should never return but jump into the CLEANUP block.
 
+    my $zeros_block;
+
     do {
         local $sftp->{autodie};
 
@@ -2106,7 +2133,7 @@ sub put {
         # $late_set_perm work around is for some servers that do not
         # support changing the permissions of open files
         if (defined $perm and !$late_set_perm) {
-            $sftp->_best_effort($best_effort, fsetstat => $rfh, $attrs) or goto CLEANUP;
+            $sftp->_best_effort($best_effort, setstat => $rfh, $attrs) or goto CLEANUP;
         }
 
         my $rfid = $sftp->_rfid($rfh);
@@ -2186,12 +2213,18 @@ sub put {
                 }
 
                 if ($len) {
-                    $debug and $debug & 16384 and
-                        _debug "writing block at offset $writeoff, length " . length($data);
+                    if ($sparse and $data =~ /^\x{00}*$/s) {
+                        $zeros_block = 1;
+                        $debug and $debug & 16384 and _debug "skipping zeros block at offset $writeoff, length $len";
+                    }
+                    else {
+                        $debug and $debug & 16384 and _debug "writing block at offset $writeoff, length $len";
 
-                    my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
-                                                   int64 => $writeoff, str => $data);
-                    push @msgid, $id;
+                        my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
+                                                       int64 => $writeoff, str => $data);
+                        push @msgid, $id;
+                        $zeros_block = 0;
+                    }
                     $writeoff = $nextoff;
                 }
             }
@@ -2213,6 +2246,10 @@ sub put {
         CORE::close $fh unless $local_is_fh;
 
         $sftp->_get_msg for (@msgid);
+
+        if ($zeros_block and not $sftp->{_error}) {
+            $sftp->truncate($rfh, $writeoff);
+        }
 
         $sftp->_close_save_status($rfh);
 
@@ -2508,7 +2545,7 @@ sub put_symlink {
     %opts and _croak_bad_options(keys %opts);
 
     $overwrite = 1 unless (defined $overwrite or $numbered);
-    my $perm = (lstat $local)[2];
+    my $perm = (CORE::lstat $local)[2];
     unless (defined $perm) {
 	$sftp->_set_error(SFTP_ERR_LOCAL_STAT_FAILED,
 			  "Couldn't stat local file '$local'", $!);
@@ -2706,7 +2743,8 @@ sub rput {
     my %put_opts = (map { $_ => delete $opts{$_} }
 		    qw(block_size queue_size overwrite
                        conversion resume numbered
-                       late_set_perm atomic best_effort));
+                       late_set_perm atomic best_effort
+                       sparse));
 
     my %put_symlink_opts = (map { $_ => $put_opts{$_} }
                             qw(overwrite numbered));
@@ -2912,7 +2950,7 @@ sub mput {
     my %put_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask perm copy_perm copy_time block_size queue_size
                        overwrite conversion resume numbered late_set_perm
-                       atomic best_effort));
+                       atomic best_effort sparse));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -2944,15 +2982,31 @@ sub mput {
 	}
 	$count++ unless $sftp->{_error};
 	$sftp->_call_on_error($on_error, $e);
-    } 
+    }
     $count;
 }
 
-sub _get_statvfs {
-    my ($sftp, $eid, $error, $errstr) = @_;
-    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY,
-                                            $eid, $error, $errstr)) {
-        # printf STDERR "msg length: %i\n", length $$msg;
+sub statvfs {
+    @_ == 2 or croak 'Usage: $sftp->statvfs($path_or_fh)';
+    ${^TAINT} and &_catch_tainted_args;
+
+    my ($sftp, $pofh) = @_;
+    my ($extension, $arg) = ( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle'))
+                              ? ('fstatvfs@openssh.com', $sftp->_rid($pofh) )
+                              : ('statvfs@openssh.com' , $sftp->_fs_encode($sftp->_rel2abs($pofh)) ) );
+
+    $sftp->_check_extension($extension => 2,
+                            SFTP_ERR_REMOTE_STATVFS_FAILED,
+                            "statvfs failed")
+        or return undef;
+
+    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
+                                   str => $extension,
+                                   str => $arg);
+
+    if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_EXTENDED_REPLY, $id,
+                                            SFTP_ERR_REMOTE_STATVFS_FAILED,
+                                            "Couldn't stat remote file system")) {
         my %statvfs = map { $_ => $msg->get_int64 } qw(bsize frsize blocks
                                                        bfree bavail files ffree
                                                        favail fsid flag namemax);
@@ -2961,42 +3015,10 @@ sub _get_statvfs {
     return undef;
 }
 
-sub statvfs {
-    @_ == 2 or croak 'Usage: $sftp->statvfs($path)';
-    ${^TAINT} and &_catch_tainted_args;
-
-    my ($sftp, $path) = @_;
-    $sftp->_check_extension('statvfs@openssh.com' => 2,
-                            SFTP_ERR_REMOTE_STATVFS_FAILED,
-                            "statvfs failed")
-        or return undef;
-
-    $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
-                                   str => 'statvfs@openssh.com',
-                                   str => $sftp->_fs_encode($path));
-    $sftp->_get_statvfs($id,
-                        SFTP_ERR_REMOTE_STATVFS_FAILED,
-                        "Couldn't stat remote file system");
-}
-
 sub fstatvfs {
-    @_ == 2 or croak 'Usage: $sftp->fstatvfs($fh)';
-    ${^TAINT} and &_catch_tainted_args;
-
-    my ($sftp, $fh) = @_;
-    $sftp->_check_extension('fstatvfs@openssh.com' => 2,
-                            SFTP_ERR_REMOTE_FSTATVFS_FAILED,
-                            "fstatvfs failed")
-        or return undef;
-
-    my $rid = $sftp->_rid($fh);
-    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
-                                   str => 'fstatvfs@openssh.com',
-                                   str => $rid);
-    $sftp->_get_statvfs($id,
-                        SFTP_ERR_REMOTE_FSTATVFS_FAILED,
-                        "Couldn't stat remote file system");
+    warn "fstatvfs is deprecated and will be removed on the upcomming 2.xx series, "
+        . "statvfs method accepts now both file handlers and paths" unless $deprecated{fstatvfs}++;
+    goto &statvfs;
 }
 
 package Net::SFTP::Foreign::Handle;
@@ -3984,6 +4006,11 @@ resumes an interrupted transfer.
 If the C<auto> value is given, the transfer will be resumed only when
 the remote file is newer than the local one.
 
+=item sparse =E<gt> 1
+
+Blocks that are all zeros are skipped possibly creating an sparse file
+on the remote host.
+
 =item atomic =E<gt> 1
 
 The local file contents are transferred into a temporal file that
@@ -4746,33 +4773,43 @@ object describing the entry.
 
 Returns undef on error or when no more entries exist on the directory.
 
-=item $sftp-E<gt>stat($path)
+=item $sftp-E<gt>stat($path_or_fh)
 
-performs a C<stat> on the remote file C<$path> and returns a
-L<Net::SFTP::Foreign::Attributes> object with the result values.
+performs a C<stat> on the remote file and returns a
+L<Net::SFTP::Foreign::Attributes> object with the result values. Both
+paths and open remote file handles can be passed to this method.
 
 Returns undef on failure.
 
 =item $sftp-E<gt>fstat($handle)
 
-is similar to the previous method but its argument has to be a handle
-to an already open remote file instead of a file name.
+this method is deprecated.
 
 =item $sftp-E<gt>lstat($path)
 
-is similar to C<stat> method but stats a symbolic link instead of the
-file the symbolic links points to.
+this method is similar to C<stat> method but stats a symbolic link
+instead of the file the symbolic links points to.
 
-=item $sftp-E<gt>setstat($path, $attrs)
+=item $sftp-E<gt>setstat($path_or_fh, $attrs)
 
-sets file attributes on remote file C<$path>.
+sets file attributes on the remote file. Accepts both paths and open
+remote file handles.
 
 Returns true on success and undef on failure.
 
 =item $sftp-E<gt>fsetstat($handle, $attrs)
 
-is similar to setstat but its first argument has to be an open remote
-file handle instead of a file name.
+this method is deprecated.
+
+=item $sftp-E<gt>truncate($path_or_fh, $size)
+
+=item $sftp-E<gt>chown($path_or_fh, $uid, $gid)
+
+=item $sftp-E<gt>chmod($path_or_fh, $perm)
+
+=item $sftp-E<gt>utime($path_or_fh, $atime, $mtime)
+
+Shortcuts around setstat.
 
 =item $sftp-E<gt>remove($path)
 
@@ -5035,20 +5072,20 @@ Unixes now.
 
 B<Q>: put fails with the following error:
 
-  Couldn't setstat remote file (fsetstat): The requested operation
-  cannot be performed because there is a file transfer in progress.
+  Couldn't setstat remote file: The requested operation cannot be
+  performed because there is a file transfer in progress.
 
 B<A>: Try passing the C<late_set_perm> option to the put method:
 
   $sftp->put($local, $remote, late_set_perm => 1)
      or die "unable to transfer file: " . $sftp->error;
 
-Some servers do not support the C<fsetstat> method on open file
+Some servers do not support the C<fsetstat> operation on open file
 handles. Setting this flag allows one to delay that operation until
 the file has been completely transferred and the remote file handle
 closed.
 
-Send me a bug report containing a dump of your $sftp object so I
+Also, send me a bug report containing a dump of your $sftp object so I
 can add code for your particular server software to activate the
 work-around automatically.
 

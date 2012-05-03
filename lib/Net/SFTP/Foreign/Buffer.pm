@@ -169,7 +169,8 @@ sub put {
     while (@_) {
 	my $type = shift;
 	my $value = shift;
-	push @parts, $pack{$type}->($value)
+        my $packer = $pack{$type} or Carp::confess("internal error: bad packing type '$type'");
+	push @parts, $packer->($value)
     }
     $$buf.=join('', @parts);
 }
