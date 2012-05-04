@@ -6,25 +6,14 @@ use strict;
 use warnings;
 use warnings::register;
 
+use 5.008;
+
 use Carp qw(carp croak);
 
 use Symbol ();
 use Errno ();
 use Fcntl;
-
-BEGIN {
-    if ($] >= 5.008) {
-        require Encode;
-    }
-    else {
-        # Work around for incomplete Unicode handling in perl 5.6.x
-        require bytes;
-        bytes->import();
-        *Encode::encode = sub { $_[1] };
-        *Encode::decode = sub { $_[1] };
-        *utf8::downgrade = sub { 1 };
-    }
-}
+require Encode;
 
 # we make $Net::SFTP::Foreign::Helpers::debug an alias for
 # $Net::SFTP::Foreign::debug so that the user can set it without
