@@ -1,6 +1,6 @@
 Revision history for Net::SFTP::Foreign
 
-1.72_02
+1.72_02  May 4, 2012
         - add methods truncate, chmod, chown and utime
         - make setstat, stat and statvfs accept both a path and a
           remote file/dir handle as its first argument

@@ -55,7 +55,11 @@ BEGIN {
     }
 }
 
-my %deprecated;
+sub _deprecated {
+    if (warnings::enabled('deprecated') and warnings::enabled(__PACKAGE__)) {
+        Carp::carp(join('', @_));
+    }
+}
 
 sub _next_msg_id { shift->{_msg_id}++ }
 
@@ -959,8 +963,8 @@ sub stat {
 }
 
 sub fstat {
-    warn "fstat is deprecated and will be removed on the upcomming 2.xx series, "
-        . "stat method accepts now both file handlers and paths" unless $deprecated{fstat}++;
+    _deprecated "fstat is deprecated and will be removed on the upcomming 2.xx series, "
+        . "stat method accepts now both file handlers and paths";
     goto &fstat;
 }
 
@@ -1103,9 +1107,8 @@ sub setstat {
 # these return true on success, undef on failure
 
 sub fsetstat {
-    warn "fsetstat is deprecated and will be removed on the upcomming 2.xx series, "
-        . "setstat method accepts now both file handlers and paths" unless $deprecated{fsetstat}++;
-
+    _deprecated "fsetstat is deprecated and will be removed on the upcomming 2.xx series, "
+        . "setstat method accepts now both file handlers and paths";
     goto &setstat;
 }
 
@@ -2123,7 +2126,7 @@ sub put {
     # Once this point is reached and for the remaining of the sub,
     # code should never return but jump into the CLEANUP block.
 
-    my $zeros_block;
+    my $last_block_was_zeros;
 
     do {
         local $sftp->{autodie};
@@ -2214,7 +2217,7 @@ sub put {
 
                 if ($len) {
                     if ($sparse and $data =~ /^\x{00}*$/s) {
-                        $zeros_block = 1;
+                        $last_block_was_zeros = 1;
                         $debug and $debug & 16384 and _debug "skipping zeros block at offset $writeoff, length $len";
                     }
                     else {
@@ -2223,7 +2226,7 @@ sub put {
                         my $id = $sftp->_queue_new_msg(SSH2_FXP_WRITE, str => $rfid,
                                                        int64 => $writeoff, str => $data);
                         push @msgid, $id;
-                        $zeros_block = 0;
+                        $last_block_was_zeros = 0;
                     }
                     $writeoff = $nextoff;
                 }
@@ -2247,9 +2250,8 @@ sub put {
 
         $sftp->_get_msg for (@msgid);
 
-        if ($zeros_block and not $sftp->{_error}) {
-            $sftp->truncate($rfh, $writeoff);
-        }
+        $sftp->truncate($rfh, $writeoff)
+            if $last_block_was_zeros and not $sftp->{_error};
 
         $sftp->_close_save_status($rfh);
 
@@ -3016,8 +3018,8 @@ sub statvfs {
 }
 
 sub fstatvfs {
-    warn "fstatvfs is deprecated and will be removed on the upcomming 2.xx series, "
-        . "statvfs method accepts now both file handlers and paths" unless $deprecated{fstatvfs}++;
+    _deprecated "fstatvfs is deprecated and will be removed on the upcomming 2.xx series, "
+        . "statvfs method accepts now both file handlers and paths";
     goto &statvfs;
 }
 
