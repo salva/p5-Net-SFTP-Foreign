@@ -1129,18 +1129,6 @@ sub _check_is_dir {}
 
 sub _cache { *{shift()}{ARRAY}[4] }
 
-*CLOSEDIR = $gen_proxy_method->('closedir');
-*READDIR = $gen_proxy_method->('_readdir');
-
-sub OPENDIR {
-    shift->CLOSEDIR;
-    undef;
-}
-
-*REWINDDIR = $gen_not_supported->();
-*TELLDIR = $gen_not_supported->();
-*SEEKDIR = $gen_not_supported->();
-
 sub DESTROY {
     local ($@, $!, $?);
     my $self = shift;
