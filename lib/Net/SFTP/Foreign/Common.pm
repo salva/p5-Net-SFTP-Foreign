@@ -128,7 +128,7 @@ sub _set_errno {
     }
 }
 
-sub _best_effort {
+sub _with_best_effort {
     my $sftp = shift;
     my $best_effort = shift;
     my $method = shift;
@@ -137,7 +137,7 @@ sub _best_effort {
     return (($best_effort or not $sftp->{_error}) ? 1 : undef);
 }
 
-sub _save_error {
+sub _with_save_error {
     my $sftp = shift;
     my $method = shift;
     local ($sftp->{_error}, $sftp->{_status}) if $sftp->{_error};
