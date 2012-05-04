@@ -1,5 +1,22 @@
 Revision history for Net::SFTP::Foreign
 
+2.00_01
+        - mayor refactoring of all the code
+        - removed deprecated methods fstat, fsetstat, fstatvfs
+        - Buffer class refactored into a functional API
+
+--------------------------------------------------------------------------
+
+
+1.72_02  May 4, 2012
+        - add methods truncate, chmod, chown and utime
+        - make setstat, stat and statvfs accept both a path and a
+          remote file/dir handle as its first argument
+        - deprecate fsetstat, fstat and fstatvfs
+        - refactor remove and rmdir generation
+        - add support for sparse file transfer
+        - minor doc improvements
+
 1.72_01  Mar 20, 2012
         - add support for asks_for_username_at_login feature (feature
           request by Horea Gligan)

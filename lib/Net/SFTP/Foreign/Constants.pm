@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Constants;
 
-our $VERSION = '1.63_05';
+our $VERSION = '2.00_01';
 
 use strict;
 use warnings;
@@ -86,13 +86,13 @@ BEGIN {
 		      SFTP_ERR_REMOTE_WRITE_FAILED => 16,
 		      SFTP_ERR_REMOTE_RENAME_FAILED => 17,
 		      SFTP_ERR_REMOTE_LSTAT_FAILED => 18,
-		      SFTP_ERR_REMOTE_FSTAT_FAILED => 19,
+		      # SFTP_ERR_REMOTE_FSTAT_FAILED => 19,
 		      SFTP_ERR_REMOTE_CLOSE_FAILED => 20,
 		      SFTP_ERR_REMOTE_REMOVE_FAILED => 21,
 		      SFTP_ERR_REMOTE_MKDIR_FAILED => 22,
 		      SFTP_ERR_REMOTE_RMDIR_FAILED => 23,
 		      SFTP_ERR_REMOTE_SETSTAT_FAILED => 24,
-		      SFTP_ERR_REMOTE_FSETSTAT_FAILED => 25,
+		      # SFTP_ERR_REMOTE_FSETSTAT_FAILED => 25,
 		      SFTP_ERR_LOCAL_STAT_FAILED => 27,
 		      SFTP_ERR_LOCAL_READ_ERROR => 28,
 		      SFTP_ERR_REMOTE_READDIR_FAILED => 29,
@@ -115,10 +115,11 @@ BEGIN {
                       SFTP_ERR_LOCAL_BIGGER_THAN_REMOTE => 46,
                       SFTP_ERR_LOCAL_SEEK_FAILED => 47,
                       SFTP_ERR_REMOTE_STATVFS_FAILED => 48,
-                      SFTP_ERR_REMOTE_FSTATVFS_FAILED => 49,
+                      # SFTP_ERR_REMOTE_FSTATVFS_FAILED => 49,
 		      SFTP_ERR_PASSWORD_AUTHENTICATION_FAILED => 50,
                       SFTP_ERR_REMOTE_HARDLINK_FAILED => 51,
 		      SFTP_ERR_LOCAL_RENAME_FAILED => 52,
+		      SFTP_ERR_LOCAL_BAD_MESSAGE => 53,
                     );
 
     for my $key (keys %constants) {

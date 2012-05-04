@@ -188,7 +188,7 @@ sub _gen_do_and_status {
 *do_write = _gen_do_and_status('sftpwrite');
 *do_close = _gen_do_and_status('close');
 *do_setstat = _gen_do_and_status('setstat');
-*do_fsetstat = _gen_do_and_status('fsetstat');
+*do_fsetstat = _gen_do_and_status('setstat');
 *do_remove = _gen_do_and_status('remove');
 *do_rename = _gen_do_and_status('rename');
 *do_mkdir = _gen_do_and_status('mkdir');
