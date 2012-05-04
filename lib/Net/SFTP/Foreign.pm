@@ -37,7 +37,6 @@ our @ISA = qw(Net::SFTP::Foreign::Common);
 our $windows;
 our $dirty_cleanup;
 
-
 BEGIN {
     $windows = $^O =~ /in(?:32|64)/i;
     $dirty_cleanup = ($^O =~ /solaris/i ? 2 : 1)
@@ -168,17 +167,13 @@ sub _do_io { $_[0]->{_backend}->_do_io(@_) }
 
 sub _conn_lost {
     my ($sftp, $status, $err, @str) = @_;
-
     $debug and $debug & 32 and _debug("_conn_lost");
-
-    $sftp->{_status} or
+    undef $sftp->{_connected};
+    unless ($sftp->{_error}) {
 	$sftp->_set_status(defined $status ? $status : SSH2_FX_CONNECTION_LOST);
-
-    $sftp->{_error} or
 	$sftp->_set_error((defined $err ? $err : SFTP_ERR_CONNECTION_BROKEN),
 			  (@str ? @str : "Connection to remote server is broken"));
-
-    undef $sftp->{_connected};
+    }
 }
 
 sub _conn_failed {
@@ -1199,10 +1194,7 @@ sub close {
 
     $rfh->_check_is_file;
     $sftp->flush($rfh);
-    do {
-        local ($sftp->{_status}, $sftp->{_error}) if $sftp->{_error};
-        $sftp->_close($rfh) and $rfh->_close;
-    };
+    $sftp->_with_save_error(_close => $rfh) and $rfh->_close;
     return !$sftp->{_error};
 }
 
@@ -1375,8 +1367,6 @@ sub atomic_rename {
                                      "Couldn't rename remote file '$old' to '$new'");
 }
 
-## SSH2_FXP_SYMLINK (20)
-# true on success, undef on failure
 sub symlink {
     @_ == 3 or croak 'Usage: $sftp->symlink($sl, $target)';
     ${^TAINT} and &_catch_tainted_args;
@@ -1403,20 +1393,6 @@ sub hardlink {
     $sftp->_get_status_msg_and_check($id, SFTP_ERR_REMOTE_HARDLINK_FAILED,
                                      "Couldn't create hardlink '$hl' pointing to '$target'");
 }
-
-sub _gen_save_status_method {
-    my $method = shift;
-    sub {
-	my $sftp = shift;
-        local ($sftp->{_error}, $sftp->{_status}) if $sftp->{_error};
-	$sftp->$method(@_);
-    }
-}
-
-
-*_close_save_status = _gen_save_status_method('close');
-*_closedir_save_status = _gen_save_status_method('closedir');
-*_remove_save_status = _gen_save_status_method('remove');
 
 sub _inc_numbered {
     $_[0] =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e or
@@ -2069,7 +2045,7 @@ sub put {
             if (defined $lsize and $writeoff == $lsize) {
                 if (defined $perm and $rattrs->perm != $perm) {
                     # FIXME: do copy_time here if required
-                    return $sftp->_best_effort($best_effort, setstat => $remote, $attrs);
+                    return $sftp->_with_best_effort($best_effort, setstat => $remote, $attrs);
                 }
                 return 1;
             }
@@ -2141,7 +2117,7 @@ sub put {
         # $late_set_perm work around is for some servers that do not
         # support changing the permissions of open files
         if (defined $perm and !$late_set_perm) {
-            $sftp->_best_effort($best_effort, setstat => $rfh, $attrs) or goto CLEANUP;
+            $sftp->_with_best_effort($best_effort, setstat => $rfh, $attrs) or goto CLEANUP;
         }
 
         my $rid = $sftp->_rid($rfh);
@@ -2258,7 +2234,7 @@ sub put {
         $sftp->truncate($rfh, $writeoff)
             if $last_block_was_zeros and not $sftp->{_error};
 
-        $sftp->_close_save_status($rfh);
+        $sftp->_with_save_error(close => $rfh);
 
         goto CLEANUP if $sftp->{_error};
 
@@ -2267,7 +2243,7 @@ sub put {
         if ($copy_time or ($late_set_perm and defined $perm)) {
             $attrs->set_perm unless $late_set_perm and defined $perm;
             $attrs->set_amtime($latime, $lmtime) if $copy_time;
-            $sftp->_best_effort($best_effort, setstat => $remote, $attrs) or goto CLEANUP
+            $sftp->_with_best_effort($best_effort, setstat => $remote, $attrs) or goto CLEANUP
         }
 
         if ($atomic) {
@@ -2279,7 +2255,7 @@ sub put {
     CLEANUP:
         if ($cleanup and $sftp->{_error}) {
             warn "cleanup $remote";
-            $sftp->_remove_save_status($remote);
+            $sftp->_with_save_error(remove => $remote);
         }
     };
     $sftp->_ok_or_autodie;
@@ -2416,7 +2392,7 @@ sub ls {
                 last;
             }
         }
-        $sftp->_closedir_save_status($rdh) if $rdh;
+        $rdh and $sftp->_with_save_error(closedir => $rdh);
     };
     unless ($sftp->{_error}) {
 	if ($delayed_wanted) {
@@ -2436,8 +2412,7 @@ sub ls {
         }
 	return \@dir;
     }
-    croak $sftp->{_error} if $sftp->{_autodie};
-    return undef;
+    $sftp->_ok_or_autodie;
 }
 
 sub rremove {
@@ -2578,7 +2553,7 @@ sub put_symlink {
                 _inc_numbered($remote);
                 redo;
             }
-            elsif ($overwrite and $sftp->_remove_save_status($remote)) {
+            elsif ($overwrite and $sftp->_with_save_error(remove => $remote)) {
                 $overwrite = 0;
                 redo;
             }
@@ -3252,7 +3227,7 @@ sub DESTROY {
     $debug and $debug & 4 and Net::SFTP::Foreign::_debug("$self->DESTROY called (sftp: ".($sftp||'<undef>').")");
     if ($self->_check and $sftp) {
         local $sftp->{_autodie};
-	$sftp->_close_save_status($self)
+	$sftp->_with_save_error(close => $self);
     }
 }
 
@@ -3294,7 +3269,7 @@ sub DESTROY {
 
     if ($self->_check and $sftp) {
         local $sftp->{_autodie};
-	$sftp->_closedir_save_status($self)
+        $sftp->_with_save_error(closedir => $self);
     }
 }
 

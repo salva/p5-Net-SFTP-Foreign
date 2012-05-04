@@ -137,6 +137,13 @@ sub _best_effort {
     return (($best_effort or not $sftp->{_error}) ? 1 : undef);
 }
 
+sub _save_error {
+    my $sftp = shift;
+    my $method = shift;
+    local ($sftp->{_error}, $sftp->{_status}) if $sftp->{_error};
+    $sftp->$method(@_);
+}
+
 sub _call_on_error {
     my ($sftp, $on_error, $entry) = @_;
     $on_error and $sftp->error
