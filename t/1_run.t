@@ -19,10 +19,10 @@ plan skip_all => "tests not supported on inferior OS"
 
 my @new_args = new_args;
 
-plan tests => 790;
+plan tests => 793;
 
 use_ok('Net::SFTP::Foreign');
-use Net::SFTP::Foreign::Constants qw(:flags);
+use Net::SFTP::Foreign::Constants qw(:flags SFTP_ERR_CONNECTION_BROKEN);
 
 $SIG{ALRM} = sub {
     print STDERR "# timeout expired: your computer is too slow or some test is not finishing\n";
@@ -347,6 +347,14 @@ for my $setcwd (0, 1) {
     ok (1, "end");
 
 }
+
+$sftp = eval { Net::SFTP::Foreign->new(@new_args, autodie => 1) };
+ok($sftp, "new with autodie");
+
+eval { $sftp->disconnect };
+is($@, '', "don't die from disconnect");
+is($sftp->error + 0, SFTP_ERR_CONNECTION_BROKEN + 0, "right error after disconnect");
+
 
 __DATA__
 
