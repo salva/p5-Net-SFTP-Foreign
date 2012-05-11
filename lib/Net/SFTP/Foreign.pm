@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.72_02';
+our $VERSION = '1.73';
 
 use strict;
 use warnings;
@@ -262,6 +262,7 @@ sub disconnect {
 
     $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'').")");
 
+    local $sftp->{_autodie};
     $sftp->_conn_lost;
 
     if (defined $pid) {
