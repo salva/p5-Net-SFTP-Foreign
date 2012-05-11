@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.72_01';
+our $VERSION = '1.73';
 
 use strict;
 use warnings;
@@ -273,7 +273,7 @@ sub _init_transport {
                     }
                 }
 
-                if (waitpid $child, POSIX::WNOHANG() > 0) {
+                if (waitpid($child, POSIX::WNOHANG()) > 0) {
                     undef $sftp->{pid};
                     my $err = $? >> 8;
                     $sftp->_conn_failed("SSH slave exited unexpectedly with error code $err");
