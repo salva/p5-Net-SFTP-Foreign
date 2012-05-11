@@ -127,17 +127,33 @@ sub _init_transport {
     else {
         my $user = delete $opts->{user};
         my $pass = delete $opts->{passphrase};
-        my $asks_for_username_at_login;
+        my $ask_for_username_at_login;
 	my $pass_is_passphrase;
+        my $password_prompt;
         if (defined $pass) {
             $pass_is_passphrase = 1;
         }
         else {
             $pass = delete $opts->{password};
-	    defined $pass and $sftp->{_password_authentication} = 1;
-            $asks_for_username_at_login = $sftp->{_asks_for_username_at_login} = delete $opts->{asks_for_username_at_login};
-            croak "asks_for user is set but user was not given"
-                if $asks_for_username_at_login and not defined $user;
+	    if (defined $pass) {
+                $sftp->{_password_authentication} = 1;
+                $password_prompt = $sftp->{_password_prompt} = delete $opts->{password_prompt};
+                if (defined $password_prompt) {
+                    unless (ref $password_prompt eq 'Regexp') {
+                        $password_prompt = quotemeta $password_prompt;
+                        $password_prompt = qr/$password_prompt\s*$/i;
+                    }
+                }
+                $ask_for_username_at_login =
+                    $sftp->{_ask_for_username_at_login} =
+                        ( delete($opts->{ask_for_username_at_login}) ||
+                          delete($opts->{asks_for_username_at_login}) );
+                if ($ask_for_username_at_login) {
+                    croak "ask_for_username_at_login set but user was not given" unless defined $user;
+                    croak "ask_for_username_at_login set can not be user with a custom password prompt"
+                        if defined $password_prompt;
+                }
+            }
         }
 
         my $expect_log_user = delete $opts->{expect_log_user} || 0;
@@ -302,12 +318,18 @@ sub _init_transport {
                     }
                     else {
                         $debug and $debug & 65536 and _debug "looking for user/password prompt";
-                        if (substr($buffer, $at) =~ /(user|name|login)?[:?]\s*$/) {
-                            if ($asks_for_username_at_login and
-                                ($asks_for_username_at_login ne 'auto' or defined $1)) {
+                        my $re = ( defined $password_prompt
+                                   ? $password_prompt
+                                   : qr/(user|name|login)?[:?]\s*$/i );
+
+                        $debug and $debug & 65536 and _debug "matching against $re";
+
+                        if (substr($buffer, $at) =~ $re) {
+                            if ($ask_for_username_at_login and
+                                ($ask_for_username_at_login ne 'auto' or defined $1)) {
                                 $debug and $debug & 65536 and _debug "sending username";
                                 print $pty "$user\n";
-                                undef $asks_for_username_at_login;
+                                undef $ask_for_username_at_login;
                             }
                             else {
                                 $debug and $debug & 65536 and _debug "sending password";

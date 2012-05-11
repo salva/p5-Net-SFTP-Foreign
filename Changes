@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.74_01
+        - add support for password_prompt (feature request by Douglas
+          Wilson)
+
 1.73  May 11, 2012
         - password authentication was broken on Solaris (maybe also on
           others) due to an incorrect waitpid call (bug report and

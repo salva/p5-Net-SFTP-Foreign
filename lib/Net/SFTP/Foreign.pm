@@ -3537,6 +3537,21 @@ to determine if it is being asked for an username.
 When set to C<0>, the username will never be sent during the
 authentication dialog. This is the default.
 
+=item password_prompt => $regex_or_str
+
+The module expects the password prompt from the remote server to end
+in a colon or a question mark. This seems to cover correctly 99% of
+real life cases.
+
+Otherwise this option can be used to handle the exceptional cases. For
+instance:
+
+  $sftp = Net::SFTP::Foreign->new($host, password => $password,
+                                  password_prompt => qr/\bpassword>\s*$/);
+
+Note that your script will hang at the login phase if the wrong prompt
+is used.
+
 =item passphrase =E<gt> $passphrase
 
 Logs into the remote server using a passphrase protected private key.
