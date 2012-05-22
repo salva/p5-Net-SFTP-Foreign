@@ -349,7 +349,18 @@ sub _init {
                                                  Encode::decode(utf8 => $vid->get_str),
                                                  $vid->get_int64 ];
                 }
-
+                elsif ($key eq 'supported2') {
+                    my $s2 = Net::SFTP::Foreign::Buffer->make("$value");
+                    $sftp->{_ext__supported2} = [ $s2->get_int32,
+                                                  $s2->get_int32,
+                                                  $s2->get_int32,
+                                                  $s2->get_int32,
+                                                  $s2->get_int32,
+                                                  $s2->get_int16,
+                                                  $s2->get_int16,
+                                                  [map Encode::decode(utf8 => $_), $s2->get_str_list],
+                                                  [map Encode::decode(utf8 => $_), $s2->get_str_list] ];
+                }
             }
 
 	    return $version;
