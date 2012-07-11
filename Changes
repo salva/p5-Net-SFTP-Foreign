@@ -8,6 +8,7 @@ Revision history for Net::SFTP::Foreign
           starting from a queue size of one go gradually increasing it
           until the stated maximum is reached (bug report by David
           R. Wagner)
+        - parse supported2 extension
 
 1.74_01
         - add support for password_prompt (feature request by Douglas
