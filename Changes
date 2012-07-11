@@ -1,5 +1,14 @@
 Revision history for Net::SFTP::Foreign
 
+1.74_02  Jul 11, 2012
+        - rget was dieing when trying to copy remote symbolic links
+        - add support for get method slow-start feature: when file
+          size is unknown don't start asking for $queue_size packets
+          as it slows down the transfer of small files, instead,
+          starting from a queue size of one go gradually increasing it
+          until the stated maximum is reached (bug report by David
+          R. Wagner)
+
 1.74_01
         - add support for password_prompt (feature request by Douglas
           Wilson)
