@@ -33,6 +33,11 @@ sub get_int8 {
     unpack(C => substr(${$_[0]}, 0, 1, ''));
 }
 
+sub get_int16 {
+    length ${$_[0]} >=2 or return undef;
+    unpack(n => substr(${$_[0]}, 0, 2, ''));
+}
+
 sub get_int32 {
     length ${$_[0]} >=4 or return undef;
     unpack(N => substr(${$_[0]}, 0, 4, ''));
@@ -80,6 +85,19 @@ sub get_str {
     my $len = unpack(N => substr($$self, 0, 4, ''));
     length $$self >=$len or return undef;
     substr($$self, 0, $len, '');
+}
+
+sub get_str_list {
+    my $self = shift;
+    my @a;
+    if (my $n = $self->get_int32) {
+        for (1..$n) {
+            my $str = $self->get_str;
+            last unless defined $str;
+            push @a, $str;
+        }
+    }
+    return @a;
 }
 
 sub get_attributes { Net::SFTP::Foreign::Attributes->new_from_buffer($_[0]) }
