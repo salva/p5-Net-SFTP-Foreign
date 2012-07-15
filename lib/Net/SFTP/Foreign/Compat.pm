@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Compat;
 
-our $VERSION = '1.36';
+our $VERSION = '1.70_05';
 
 use warnings;
 use strict;
@@ -37,6 +37,11 @@ sub import {
     }
 }
 
+our %DEFAULTS = ( put => [best_effort => 1],
+                  get => [best_effort => 1],
+                  ls  => [],
+                  new => [] );
+
 BEGIN {
     my @forbidden = qw( setcwd cwd open opendir sftpread sftpwrite seek
                         tell eof write flush read getc lstat stat fstat
@@ -68,7 +73,7 @@ sub new {
 	$warn = sub { warn(CORE::join '', @_, "\n") };
     }
 
-    my $sftp = $class->SUPER::new($host, %opts);
+    my $sftp = $class->SUPER::new($host, @{$DEFAULTS{new}}, %opts);
 
     $sftp->{_compat_warn} = $warn;
 
@@ -96,19 +101,25 @@ sub status {
 }
 
 sub get {
+    croak '$Usage: $sftp->get($local, $remote, $cb)' if @_ < 2 or @_ > 4;
     my ($sftp, $remote, $local, $cb) = @_;
 
     my $save = defined(wantarray);
     my @content;
+    my @cb;
+    if (defined $cb or $save) {
+        @cb = ( callback => sub {
+                    my ($sftp, $data, $off, $size) = @_;
+                    $cb->($sftp, $data, $off, $size) if $cb;
+                    push @content, $data if $save
+                });
+    }
 
     $sftp->SUPER::get($remote, $local,
-		      dont_save => !defined($local),
-		      callback => sub {
-			  my ($sftp, $data, $off, $size) = @_;
-			  $cb->($sftp, $data, $off, $size) if $cb;
-			  push @content, $data if $save
-		      } )
-	or return undef;
+                      @{$DEFAULTS{get}},
+                      dont_save => !defined($local),
+                      @cb)
+        or return undef;
 
     if ($save) {
 	return CORE::join('', @content);
@@ -116,25 +127,29 @@ sub get {
 }
 
 sub put {
+    croak '$Usage: $sftp->put($local, $remote, $cb)' if @_ < 3 or @_ > 4;
     my ($sftp, $local, $remote, $cb) = @_;
 
     $sftp->SUPER::put($local, $remote,
-		      (defined $cb ? (callback => $cb) : ()));
+                      @{$DEFAULTS{put}},
+		      callback => $cb);
     $sftp->_warn_error;
     !$sftp->SUPER::error;
 }
 
 sub ls {
+    croak '$Usage: $sftp->ls($path, $cb)' if @_ < 2 or @_ > 3;
     my ($sftp, $path, $cb) = @_;
     if ($cb) {
 	$sftp->SUPER::ls($path,
+                         @{$DEFAULTS{ls}},
 			 wanted => sub { _rebless_attrs($_[1]->{a});
 					 $cb->($_[1]);
 					 0 } );
 	return ();
     }
     else {
-	if (my $ls = $sftp->SUPER::ls($path)) {
+	if (my $ls = $sftp->SUPER::ls($path, @{$DEFAULTS{ls}})) {
 	    _rebless_attrs($_->{a}) for @$ls;
 	    return @$ls;
 	}
@@ -173,7 +188,7 @@ sub _gen_do_and_status {
 *do_write = _gen_do_and_status('sftpwrite');
 *do_close = _gen_do_and_status('close');
 *do_setstat = _gen_do_and_status('setstat');
-*do_fsetstat = _gen_do_and_status('fsetstat');
+*do_fsetstat = _gen_do_and_status('setstat');
 *do_remove = _gen_do_and_status('remove');
 *do_rename = _gen_do_and_status('rename');
 *do_mkdir = _gen_do_and_status('mkdir');
@@ -190,8 +205,10 @@ sub _rebless_attrs {
 }
 
 sub _gen_do_stat {
-    my $method = "SUPER::" . shift;
+    my $name = shift;
+    my $method = "SUPER::$name";
     return sub {
+        croak '$Usage: $sftp->'.$name.'($local, $remote, $cb)' if @_ != 2;
 	my $sftp = shift;
 	if (my $a = $sftp->$method(@_)) {
 	    return _rebless_attrs($a);
@@ -240,9 +257,37 @@ the C<Net::SFTP> and L<Net::SFTP::Attributes> packages so no other
 parts of the program have to modified in order to move from Net::SFTP
 to Net::SFTP::Foreign.
 
+=head2 Setting defaults
+
+The hash C<%Net::SFTP::Foreign::DEFAULTS> can be used to set default
+values for L<Net::SFTP::Foreign> methods called under the hood and
+otherwise not accesible through the Net::SFTP API.
+
+The entries currently supported are:
+
+=over
+
+=item new => \@opts
+
+extra options passed to Net::SFTP::Foreign constructor.
+
+=item get => \@opts
+
+extra options passed to Net::SFTP::Foreign::get method.
+
+=item put => \@opts
+
+extra options passed to Net::SFTP::Foreign::put method.
+
+=item ls  => \@opts
+
+extra options passed to Net::SFTP::Foreign::ls method.
+
+=back
+
 =head1 COPYRIGHT
 
-Copyright (c) 2006-2008 Salvador FandiE<ntilde>o
+Copyright (c) 2006-2008, 2011 Salvador FandiE<ntilde>o
 
 All rights reserved.  This program is free software; you can
 redistribute it and/or modify it under the same terms as Perl itself.

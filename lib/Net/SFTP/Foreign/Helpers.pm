@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Helpers;
 
-our $VERSION = '1.68_02';
+our $VERSION = '1.70_06';
 
 use strict;
 use warnings;
@@ -26,6 +26,8 @@ our @EXPORT_OK = qw( _is_lnk
                      _is_reg
                      _do_nothing
 		     _glob_to_regex
+                     _file_part
+                     _umask_save_and_set
                      _tcroak );
 
 our $debug;
@@ -116,8 +118,8 @@ sub _ensure_list {
     local $@;
     local $SIG{__DIE__};
     local $SIG{__WARN__};
-    return @$l if eval { @$l >= 0 };
-    return ($l);
+    no warnings;
+    (eval { @$l; 1 } ? @$l : $l);
 }
 
 sub _glob_to_regex {
@@ -277,7 +279,7 @@ sub _gen_converter {
             return sub {
                 my $before = length $_[0];
                 $conversion->($_[0]);
-                length $_[0] - $before;
+                length($_[0]) - $before;
             }
         }
         else {
@@ -298,6 +300,23 @@ sub _gen_converter {
 sub _is_lnk { (0120000 & shift) == 0120000 }
 sub _is_dir { (0040000 & shift) == 0040000 }
 sub _is_reg { (0100000 & shift) == 0100000 }
+
+sub _file_part {
+    my $path = shift;
+    $path =~ m{([^/]*)$} or croak "unable to get file part from path '$path'";
+    $1;
+}
+
+sub _umask_save_and_set {
+    my $umask = shift;
+    if (defined $umask) {
+        my $old = umask $umask;
+        return bless \$old, 'Net::SFTP::Foreign::Helpers::umask_saver';
+    }
+    ()
+}
+
+sub Net::SFTP::Foreign::Helpers::umask_saver::DESTROY { umask ${$_[0]} }
 
 1;
 

@@ -1,5 +1,142 @@
 Revision history for Net::SFTP::Foreign
 
+1.74_02  Jul 11, 2012
+        - rget was dieing when trying to copy remote symbolic links
+        - add support for get method slow-start feature: when file
+          size is unknown don't start asking for $queue_size packets
+          as it slows down the transfer of small files, instead,
+          starting from a queue size of one go gradually increasing it
+          until the stated maximum is reached (bug report by David
+          R. Wagner)
+        - parse supported2 extension
+
+1.74_01
+        - add support for password_prompt (feature request by Douglas
+          Wilson)
+
+1.73  May 11, 2012
+        - password authentication was broken on Solaris (maybe also on
+          others) due to an incorrect waitpid call (bug report and
+          solution by Douglas Wilson)
+        - disconnect was dieing when used with autodie on (bug report
+          by Douglas Wilson)
+
+1.72_02  May 4, 2012
+        - add methods truncate, chmod, chown and utime
+        - make setstat, stat and statvfs accept both a path and a
+          remote file/dir handle as its first argument
+        - deprecate fsetstat, fstat and fstatvfs
+        - refactor remove and rmdir generation
+        - add support for sparse file transfer
+        - minor doc improvements
+
+1.72_01  Mar 20, 2012
+        - add support for asks_for_username_at_login feature (feature
+          request by Horea Gligan)
+        - key_path now can accept an array
+
+1.71  Mar 14, 2012
+        - release as stable
+        - add support for vendor-id extension
+
+1.70_10  Mar 2, 2012
+        - now perm and umask can be used together on get method calls
+        - more cleanups for permission handling code on get method
+
+1.70_09  Mar 2, 2012
+        - autodie was no working for chmod errors on get
+        - get was unlinking the file when chmod failed even whith
+          append or resume set
+        - get was failing when chmod failed even if copy_perms was
+          dissabled (bug report by Rich Anderson)
+        - solve bad interaction between autodie, resume and append
+        - best_effort wrapped methods were not failing ever
+        - minor put method refactoring
+        - save globals on destructor entry
+        - better put method debugging
+
+1.70_08  Feb 19, 2012
+        - queue_size defaults per backend were using the wrong key
+          name and so being ignored. That was causing connections to
+          stall on Windows with the default backend.
+
+1.70_07  Feb 19, 2012
+        - put recovers from open calls failing due to the existence of
+          a remote file with the wrong permissions
+        - do not use accessors for status and error slots internally
+        - test_d and test_e methods where broken when used with
+          autodie, this bug may also affected rget, rput and other
+          high level methods
+
+1.70_06  Feb 13, 2012
+        - add put_content method
+        - support perm option in mget, mput, rget and rput methods
+        - better umask handling, now use an object to reset it at end
+          of scope
+        - improve debugging output
+
+1.70_05  Feb 5, 2012
+        - on Compat::get $remote argument is optional
+        - make Compat::(get|put) use best_effort by default
+        - add support for best_effort feature
+
+1.70_04  Jan 22, 2012
+        - check number of arguments passed to Compat methods
+
+1.70_03  Dec 11, 2011
+        - remove uninitialized warning when using a custom transport
+          (bug report by Kay-C. Baufeld)
+        - several spelling corrections (patch contributed by Nicholas
+          Bamber)
+
+1.70_02  Dec 10, 2011
+        - syntax error, POSIX::WNOHANG was recognized as bareword in
+          perl 5.8
+
+1.70_01  Dec 9, 2011
+        - do not use Expect to handle password authentication but a
+          hand-crafted method that uses IO::Pty directly
+        - solve problem with connections stalling when using password
+          authentication and the remote host was unreachable (bug
+          report by Srini T)
+
+1.69  Dec 9, 2011
+        - release as stable
+
+1.68_08 Oct 11, 2011
+        - accept an array reference in ssh_cmd
+        - use warnings::warnif to generate warnings
+        - minor doc improvements and corrections
+        - in case of sftp-server not found test were not skipped but
+          failed
+
+1.68_07  Oct 10, 2011
+        - password authentication was not working with the new
+          IPC::Open3 replacement code (bug report by Srini T)
+        - empty password handling was also broken
+        - allow setting the backend on all the tests
+
+1.68_06  Oct 9, 2011
+        - do not use the buggy IPC::Open3 under Unix/Linux. This is a
+          mayor internal change, please report any connection problems
+          that were not happening with previous versions of the module
+        - allow testing Windows backend under Unix
+
+1.68_05  Sep 27, 2011
+        - this version is more picky about incomplete responses to
+          stat requests when copy_perms or copy_time are enabled
+          (implicetly or explicitly) on get method
+        - handle incomplete attributes in stat response inside get
+          (bug report by Gus via the Perl Guru Forums).
+
+1.68_04  Sep 7, 2011
+        - accept passing undef as second argument to put, get, rput,
+          rget, mput and mget
+        - catch invalid undefined arguments in several places
+        - custom conversion usage was broken
+        - add %DEFAULTS to Compat package for setting default options
+          for Net::SFTP::Foreign methods called under the hood.
+
 1.68_03  Aug 28, 2011
         - atomic feature added to get, put and higher level methods
           using them
@@ -101,7 +238,7 @@ Revision history for Net::SFTP::Foreign
           report by rfbits at PerlMonks)
 
 1.61  Sep 22, 2010
-        - remove some dead code introducing unneded constraints that
+        - remove some dead code introducing unneeded constraints that
           cause the Net::SSH2 backend to fail (bug report by Philippe
           Vouters)
 

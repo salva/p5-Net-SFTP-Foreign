@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Windows;
 
-our $VERSION = '1.63_05';
+our $VERSION = '1.70_08';
 
 use strict;
 use warnings;
@@ -8,6 +8,8 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SFTP::Foreign);
 
+use IPC::Open3;
+use POSIX ();
 use Net::SFTP::Foreign::Helpers;
 use Net::SFTP::Foreign::Constants qw(SSH2_FX_BAD_MESSAGE
 				     SFTP_ERR_REMOTE_BAD_MESSAGE);
@@ -16,7 +18,7 @@ require Net::SFTP::Foreign::Backend::Unix;
 our @ISA = qw(Net::SFTP::Foreign::Backend::Unix);
 
 sub _defaults {
-    ( default_queue_size => 4 )
+    ( queue_size => 16 )
 }
 
 sub _init_transport_streams {
@@ -35,27 +37,37 @@ sub _open_dev_null {
     $dev_null
 }
 
-# workaround for IPC::Open3 not working with tied filehandles even
-# when they implement FILENO
-sub _open3 {
+sub _open4 {
     my $backend = shift;
     my $sftp = shift;
-    if (tied(*STDERR)) {
-	my $fn = eval { defined $_[2] ? fileno $_[2] : fileno *STDERR };
-	unless (defined $fn and $fn >= 0) {
-	    $sftp->_conn_failed("STDERR or stderr_fh is not a real file handle: " . (length $@ ? $@ : $!));
-	    return;
-	}
-	local *STDERR;
-	unless (open STDERR, ">&=$fn") {
-	    $sftp->_conn_failed("Unable to reattach STDERR to fd $fn: $!");
-	    return;
-	}
-	$backend->SUPER::_open3($sftp, @_);
+
+    defined $_[3] and croak "setting child PTY is not supported on Windows";
+
+    my $fno = eval { defined $_[2] ? fileno $_[2] : fileno *STDERR };
+    unless (defined $fno and $fno >= 0) {
+        $sftp->_conn_failed("STDERR or stderr_fh is not a real file handle: " . (length $@ ? $@ : $!));
+        return;
     }
-    else {
-	$backend->SUPER::_open3($sftp, @_);
+
+    local *SSHERR;
+    unless (open(SSHERR, ">>&=", $fno)) {
+        $sftp->_conn_failed("Unable to duplicate stderr redirection file handle: $!");
+        return undef;
     }
+
+    goto NOTIE unless tied *STDERR;
+    local *STDERR;
+    unless (open STDERR, ">&=2") {
+        $sftp->_conn_failed("Unable to reattach STDERR to fd 2: $!");
+        return;
+    }
+ NOTIE:
+    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+
+    my $ppid = $$;
+    my $pid = eval { open3(@_[1,0], ">&SSHERR", @_[4..$#_]) };
+    $ppid == $$ or POSIX::_exit(-1);
+    $pid;
 }
 
 sub _after_init {}

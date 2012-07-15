@@ -13,18 +13,16 @@ use common;
 use File::Spec;
 use Cwd qw(getcwd);
 
-my $server; # = 'localhost';
-my $sscmd = sftp_server;
-
+my $salva = eval "no warnings; getlogin eq 'salva'";
 plan skip_all => "tests not supported on inferior OS"
-    if (is_windows and eval "no warnings; getlogin ne 'salva'");
-plan skip_all => "sftp-server not found"
-    unless defined $sscmd;
+    if (is_windows and not $salva);
 
-plan tests => 742;
+my @new_args = new_args;
+
+plan tests => 793;
 
 use_ok('Net::SFTP::Foreign');
-use Net::SFTP::Foreign::Constants qw(:flags);
+use Net::SFTP::Foreign::Constants qw(:flags SFTP_ERR_CONNECTION_BROKEN);
 
 $SIG{ALRM} = sub {
     print STDERR "# timeout expired: your computer is too slow or some test is not finishing\n";
@@ -33,10 +31,6 @@ $SIG{ALRM} = sub {
 
 # don't set the alarm if we are being debugged!
 alarm 300 unless exists ${DB::}{sub};
-
-my @new_args = defined $server
-    ? (host => $server, timeout => 20)
-    : (open2_cmd => $sscmd, timeout => 20);
 
 my $sftp = eval { Net::SFTP::Foreign->new(@new_args) };
 diag($@) if $@;
@@ -118,6 +112,13 @@ for my $setcwd (0, 1) {
         ok ($sftp->get($drfn, $dlfn1), "get - $i");
         diag ($sftp->error) if $sftp->error;
         ok(!filediff($drfn_l, $dlfn1), "get - file content - $i");
+        unlink $dlfn1;
+
+        my $c = 0;
+        ok ($sftp->get($drfn, $dlfn1, conversion => sub { $c = 1 } ), "get with conversion - $i");
+        diag ($sftp->error) if $sftp->error;
+        ok(!filediff($drfn_l, $dlfn1), "get with conversion - file content - $i");
+        ok($c, "get with conversion - conversion done - $i");
         unlink $dlfn1;
 
 	ok (open(F, '>', $dlfn1), "get fh - open - $i");
@@ -346,6 +347,14 @@ for my $setcwd (0, 1) {
     ok (1, "end");
 
 }
+
+$sftp = eval { Net::SFTP::Foreign->new(@new_args, autodie => 1) };
+ok($sftp, "new with autodie");
+
+eval { $sftp->disconnect };
+is($@, '', "don't die from disconnect");
+is($sftp->error + 0, SFTP_ERR_CONNECTION_BROKEN + 0, "right error after disconnect");
+
 
 __DATA__
 

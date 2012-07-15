@@ -8,12 +8,9 @@ TODO
 
 - add support for encodings
 
-- improve password login, remove Expect dependency and try to backport
-  as much as possible fron Net::OpenSSH
-
-- detect unknown host key checking
-
 - add support for process filters on put/get operations
+
+- implement save_status methods as a wrapper like best_effort
 
 DONE
 ==== 
@@ -26,3 +23,12 @@ DONE
 - add support for unix2dos and dos2unix transformations on the fly for get and put.
 
 - add support for restarting transfers in put, get and derived methods.
+
+- improve password login, remove Expect dependency and try to backport
+  as much as possible fron Net::OpenSSH
+
+- detect unknown host key checking
+
+- make setstat failures optionally non fatal inside put method
+  (relaxed)
+
