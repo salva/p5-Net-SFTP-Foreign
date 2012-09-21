@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.74_03  Sep 21, 2012
+        - put_content was broken (bug report by Caleb Cushing)
+        - document put_content method
+        - add more tests
+
 1.74_02  Jul 11, 2012
         - rget was dieing when trying to copy remote symbolic links
         - add support for get method slow-start feature: when file
