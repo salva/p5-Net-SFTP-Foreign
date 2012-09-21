@@ -2309,12 +2309,11 @@ sub put_content {
     %opts and _croak_bad_options(keys %opts);
 
     my $fh;
-    unless (CORE::open $fh, '<', \$_[0]) {
+    unless (CORE::open $fh, '<', \$_[1]) {
         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED, "Can't open scalar as file handle", $!);
         return undef;
     }
     $sftp->put($fh, $remote, %opts);
-
 }
 
 sub ls {
@@ -4120,9 +4119,14 @@ See the FAQ below.
 
 =back
 
+=item $sftp-E<gt>put_content($bytes, $remote, %opts)
+
+Creates (or overwrites) a remote file whose content is the passed
+data.
+
 =item $sftp-E<gt>put_symlink($local, $remote, %opts)
 
-copies a local symlink to the remote host.
+Copies a local symlink to the remote host.
 
 The accepted options are C<overwrite> and C<numbered>.
 
