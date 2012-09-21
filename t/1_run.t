@@ -219,17 +219,22 @@ for my $setcwd (0, 1) {
     }
     ok (close($fh), "close write file");
 
+    my $ctn = $sftp->get_content($drfn);
+    is($ctn, $cp, "get_content");
+
+    unlink $drfn_l;
+    $sftp->put_content($cp, $drfn);
+
     $fh = $sftp->open($drfn);
     ok($fh, "open read file 3");
 
     ok(!$sftp->eof($fh), "not at eof");
 
     while (1) {
-        my $data = $sftp->read($fh, 1+int(rand 64000));
+        my $data = $sftp->read($fh, 1 + int(rand 64000));
         last unless defined $data;
         $all .= $data;
     }
-
     is($all, $cp, "write and read chunks");
 
     ok(eof($fh), "at eof");
@@ -255,8 +260,6 @@ for my $setcwd (0, 1) {
         }
     }
 
-    my $ctn = $sftp->get_content($drfn);
-    is($ctn, $all, "get_content");
     # D($ctn, $all, -10, 30) and diag "got: $a\nexp: $b\n\n";
 
     is(seek($fh, 0, 0), 0, 'seek - 3');
