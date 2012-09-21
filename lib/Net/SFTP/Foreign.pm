@@ -2299,17 +2299,20 @@ sub put {
 }
 
 sub put_content {
+    my ( $sftp, $content , $remote, %opts ) = @_;
+
     @_ >= 3 or croak 'Usage: $sftp->put_content($content, $remote, %opts)';
     ${^TAINT} and &_catch_tainted_args;
 
-    my ($sftp, undef, $remote, %opts) = @_;
     my %put_opts = ( map { $_ => delete $opts{$_} }
                      qw(perm umask block_size queue_size overwrite conversion resume
                         numbered late_set_perm atomic best_effort));
     %opts and _croak_bad_options(keys %opts);
 
+	my $content_ref = ref $content eq 'SCALAR' ? $content : \$content;
+
     my $fh;
-    unless (CORE::open $fh, '<', \$_[0]) {
+    unless (CORE::open $fh, '<', $content_ref ) {
         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED, "Can't open scalar as file handle", $!);
         return undef;
     }
