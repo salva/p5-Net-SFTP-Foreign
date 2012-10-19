@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.74_04
+        - stat and lstat path arguments is now optional and defaults
+          to '.' (bug report by Paul Colano)
+        - fstat was broken
+        - add git repository and bugtracker into meta files
+
 1.74_03  Sep 21, 2012
         - put_content was broken (bug report by Caleb Cushing)
         - document put_content method
