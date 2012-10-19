@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.74_03';
+our $VERSION = '1.74_04';
 
 use strict;
 use warnings;
@@ -946,10 +946,11 @@ sub getc {
 # these all return a Net::SFTP::Foreign::Attributes object on success, undef on failure
 
 sub lstat {
-    @_ == 2 or croak 'Usage: $sftp->lstat($path)';
+    @_ <= 2 or croak 'Usage: $sftp->lstat($path)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $path) = @_;
+    $path = '.' unless defined $path;
     $path = $sftp->_rel2abs($path);
     my $id = $sftp->_queue_str_request(SSH2_FXP_LSTAT, $sftp->_fs_encode($path));
     if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
@@ -960,10 +961,11 @@ sub lstat {
 }
 
 sub stat {
-    @_ == 2 or croak 'Usage: $sftp->stat($path_or_fh)';
+    @_ <= 2 or croak 'Usage: $sftp->stat($path_or_fh)';
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $pofh) = @_;
+    $pofh = '.' unless defined $pofh;
     my $id = $sftp->_queue_new_msg( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle'))
                                     ? ( SSH2_FXP_FSTAT, str => $sftp->_rid($pofh))
                                     : ( SSH2_FXP_STAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh))) );
@@ -977,7 +979,7 @@ sub stat {
 sub fstat {
     _deprecated "fstat is deprecated and will be removed on the upcomming 2.xx series, "
         . "stat method accepts now both file handlers and paths";
-    goto &fstat;
+    goto &stat;
 }
 
 ## SSH2_FXP_RMDIR (15), SSH2_FXP_REMOVE (13)
