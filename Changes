@@ -1,6 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
-1.74_04
+1.74_04  Oct 25, 2012
+        - overwriting/atomic rename was broken (bug report by Mike
+          Wilder)
         - stat and lstat path arguments is now optional and defaults
           to '.' (bug report by Paul Colano)
         - fstat was broken
