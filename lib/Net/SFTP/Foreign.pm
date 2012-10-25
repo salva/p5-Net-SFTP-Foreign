@@ -1496,6 +1496,10 @@ sub get {
     $sftp->_clear_error_and_status;
 
     my $local_encoded;
+    # $local_encoded is manually keep in sync with $local. Every time
+    # $local is changed $local_encoded is recalculated. Later we do
+    # the same for $atomic_local and $atomic_local_encoded.
+
     $local_encoded = $sftp->_local_fs_encode($local) unless $local_is_fh;
 
     if ($resume and $resume eq 'auto') {
