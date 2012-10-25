@@ -24,6 +24,20 @@ our $windows;
 
 use Net::SFTP::Foreign::Constants qw(:status);
 
+BEGIN {
+    if ($] >= 5.008) {
+        require Encode;
+    }
+    else {
+        # Work around for incomplete Unicode handling in perl 5.6.x
+        require bytes;
+        bytes->import();
+        *Encode::encode = sub { $_[1] };
+        *Encode::decode = sub { $_[1] };
+        *utf8::downgrade = sub { 1 };
+    }
+}
+
 my %status_str = ( SSH2_FX_OK, "OK",
 		   SSH2_FX_EOF, "End of file",
 		   SSH2_FX_NO_SUCH_FILE, "No such file or directory",
