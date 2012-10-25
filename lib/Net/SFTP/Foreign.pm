@@ -44,15 +44,12 @@ use Net::SFTP::Foreign::Buffer;
 require Net::SFTP::Foreign::Common;
 our @ISA = qw(Net::SFTP::Foreign::Common);
 
+our $windows;
 our $dirty_cleanup;
-my $windows;
 
 BEGIN {
-    $windows = $^O =~ /Win(?:32|64)/;
-
-    if ($^O =~ /solaris/i) {
-	$dirty_cleanup = 1 unless defined $dirty_cleanup;
-    }
+    $dirty_cleanup = ($^O =~ /solaris/i ? 1 : 0)
+	unless defined $dirty_cleanup;
 }
 
 sub _deprecated {
@@ -162,6 +159,16 @@ sub _remote_fs_decode {
     Encode::decode($sftp->{_remote_fs_encoding}, $path);
 }
 
+sub _local_fs_encode {
+    my ($sftp, $path) = @_;
+    Encode::encode($sftp->{_local_fs_encoding}, $path);
+}
+
+sub _local_fs_decode {
+    my ($sftp, $path) = @_;
+    Encode::decode($sftp->{_local_fs_encoding}, $path);
+}
+
 sub new {
     ${^TAINT} and &_catch_tainted_args;
 
@@ -169,13 +176,12 @@ sub new {
     unshift @_, 'host' if @_ & 1;
     my %opts = @_;
 
-    my $sftp = { _msg_id => 0,
-		 _bout => '',
-		 _bin => '',
-		 _connected => 1,
-		 _queued => 0 };
-
-    bless $sftp, $class;
+    my $sftp = $class->SUPER::_new(\%opts);
+    $sftp->{_msg_id} = 0;
+    $sftp->{_bout} = '';
+    $sftp->{_bin} = '';
+    $sftp->{_connected} = 1;
+    $sftp->{_queued} = 1;
 
     if ($debug) {
         _debug "This is Net::SFTP::Foreign $Net::SFTP::Foreign::VERSION";
@@ -220,23 +226,6 @@ sub new {
 
     $sftp->{_timeout} = delete $opts{timeout};
     defined $sftp->{_timeout} and $sftp->{_timeout} <= 0 and croak "invalid timeout";
-
-    for (qw(remote_fs_encoding local_fs_encoding)) {
-        my $enc = delete $opts{$_};
-        $enc = delete $opts{fs_encoding} if not defined $enc and /remote/; # support deprecated name
-        carp "$_ is not supported in this perl version ($])"
-            if $] < 5.008 and defined $enc;
-
-        $sftp->{"_$_"} = ( defined $enc        ? $enc     :
-                           $windows && /local/ ? 'cp1252' :
-                                                 'utf8'   );
-    }
-
-    if ($sftp->{local_fs_encoding} =~ /^locale(?:_fs)?$/) {
-        eval { require Encode::Locale; 1 }
-            or croak "local file system encoding detection not available, "
-                . "Encode::Locale is not installed or failed to load: $@";
-    }
 
     $sftp->autodisconnect(delete $opts{autodisconnect});
 

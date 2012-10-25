@@ -17,7 +17,7 @@ BEGIN {
         };
 }
 
-use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug _glob_to_regex _is_lnk _is_dir $debug);
+use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug _glob_to_regex _is_lnk _is_dir $debug $windows);
 use Net::SFTP::Foreign::Constants qw(:status);
 
 my %status_str = ( SSH2_FX_OK, "OK",
@@ -31,6 +31,32 @@ my %status_str = ( SSH2_FX_OK, "OK",
 		   SSH2_FX_OP_UNSUPPORTED, "Operation unsupported" );
 
 our $debug;
+
+
+sub _new {
+    my ($class, $opts) = @_;
+    my $sftp = {};
+    bless $sftp, $class;
+
+    for (qw(remote_fs_encoding local_fs_encoding)) {
+        my $enc = delete $opts->{$_};
+        $enc = delete $opts->{fs_encoding} if not defined $enc and /remote/; # support deprecated name
+        carp "$_ is not supported in this perl version ($])"
+            if $] < 5.008 and defined $enc;
+
+        $sftp->{"_$_"} = ( defined $enc        ? $enc     :
+                           $windows && /local/ ? 'cp1252' :
+                                                 'utf8'   );
+    }
+
+    if ($sftp->{_local_fs_encoding} =~ /^locale(?:_fs)?$/) {
+        eval { require Encode::Locale; 1 }
+            or croak "local file system encoding detection not available, "
+                . "Encode::Locale is not installed or failed to load: $@";
+    }
+
+    $sftp;
+}
 
 sub _set_status {
     my $sftp = shift;

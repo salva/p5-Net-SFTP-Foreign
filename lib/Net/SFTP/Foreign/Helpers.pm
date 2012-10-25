@@ -28,13 +28,17 @@ our @EXPORT_OK = qw( _is_lnk
 		     _glob_to_regex
                      _file_part
                      _umask_save_and_set
-                     _tcroak );
+                     _tcroak
+                     $windows );
 
-our $debug;
+our ($debug, $windows);
 
 BEGIN {
     eval "use Time::HiRes 'time'"
-	if ($debug and $debug & 256)
+	if ($debug and $debug & 256);
+
+
+    $windows = $^O =~ /Win(?:32|64)/;
 }
 
 sub _debug {
