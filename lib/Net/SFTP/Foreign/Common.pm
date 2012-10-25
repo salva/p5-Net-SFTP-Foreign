@@ -17,7 +17,11 @@ BEGIN {
         };
 }
 
-use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug _glob_to_regex _is_lnk _is_dir $debug $windows);
+use Net::SFTP::Foreign::Helpers qw(_gen_wanted _ensure_list _debug
+                                   _glob_to_regex _is_lnk _is_dir
+                                   $debug $windows);
+our $windows;
+
 use Net::SFTP::Foreign::Constants qw(:status);
 
 my %status_str = ( SSH2_FX_OK, "OK",
@@ -29,8 +33,6 @@ my %status_str = ( SSH2_FX_OK, "OK",
 		   SSH2_FX_NO_CONNECTION, "No connection",
 		   SSH2_FX_CONNECTION_LOST, "Connection lost",
 		   SSH2_FX_OP_UNSUPPORTED, "Operation unsupported" );
-
-our $debug;
 
 
 sub _new {
