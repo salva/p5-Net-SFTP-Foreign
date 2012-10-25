@@ -1898,13 +1898,14 @@ sub put {
 	$neg_umask = 0777 & ~$umask;
     }
 
-    my ($fh, $lmode, $lsize, $latime, $lmtime);
+    my ($fh, $lmode, $lsize, $latime, $lmtime, $local_encoded);
     if ($local_is_fh) {
 	$fh = $local;
 	# we don't set binmode for the passed file handle on purpose
     }
     else {
-	unless (CORE::open $fh, '<', $local) {
+        $local_encoded = $sftp->_local_fs_encode($local);
+	unless (CORE::open $fh, '<', $local_encoded) {
 	    $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
 			      "Unable to open local file '$local'", $!);
 	    return undef;
@@ -1917,15 +1918,23 @@ sub put {
 	# lacking support for some methods, so we call them wrapped
 	# inside eval blocks
 	local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-	if ((undef, undef, $lmode, undef, undef,
-	     undef, undef, $lsize, $latime, $lmtime) =
-	    eval {
-		no warnings; # Calling stat on a tied handler
-                             # generates a warning because the op is
-                             # not supported by the tie API.
-		CORE::stat $fh;
-	    }
-	   ) {
+	my @stat = eval {
+            no warnings; # Calling stat on a tied handler
+            # generates a warning because the op is
+            # not supported by the tie API.
+            CORE::stat $fh;
+        };
+        # some operating systems do not support the fstat call, in
+        # that case we fall back to runnin stat on the name:
+        unless (@stat or $local_is_fh) {
+            @stat = eval {
+                no warnings;
+                CORE::stat $local_encoded;
+            };
+        }
+
+        if (@stat) {
+            ($lmode, $lsize, $latime, $lmtime) = @stat[2, 7, 8, 9];
             $debug and $debug & 16384 and _debug "local file size is " . (defined $lsize ? $lsize : '<undef>');
 
 	    # $fh can point at some place inside the file, not just at the
