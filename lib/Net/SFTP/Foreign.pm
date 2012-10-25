@@ -12,20 +12,6 @@ use Symbol ();
 use Errno ();
 use Fcntl;
 
-BEGIN {
-    if ($] >= 5.008) {
-        require Encode;
-    }
-    else {
-        # Work around for incomplete Unicode handling in perl 5.6.x
-        require bytes;
-        bytes->import();
-        *Encode::encode = sub { $_[1] };
-        *Encode::decode = sub { $_[1] };
-        *utf8::downgrade = sub { 1 };
-    }
-}
-
 # we make $Net::SFTP::Foreign::Helpers::debug an alias for
 # $Net::SFTP::Foreign::debug so that the user can set it without
 # knowing anything about the Helpers package!
@@ -1509,16 +1495,19 @@ sub get {
 
     $sftp->_clear_error_and_status;
 
+    my $local_encoded;
+    $local_encoded = $sftp->_local_fs_encode($local) unless $local_is_fh;
+
     if ($resume and $resume eq 'auto') {
         undef $resume;
         if (defined $mtime) {
-            if (my @lstat = CORE::stat $local) {
+            if (my @lstat = CORE::stat $local_encoded) {
                 $resume = ($mtime <= $lstat[9]);
             }
         }
     }
 
-    my ($atomic_numbered, $atomic_local, $atomic_cleanup);
+    my ($atomic_local, $atomic_local_encoded, $atomic_numbered, $atomic_cleanup);
 
     my ($rfh, $fh);
     my $askoff = 0;
@@ -1530,7 +1519,7 @@ sub get {
     }
     else {
         unless ($local_is_fh or $overwrite or $append or $resume or $numbered) {
-	    if (-e $local) {
+	    if (-e $local_encoded) {
                 $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
                                   "local file $local already exists");
                 return undef
@@ -1539,14 +1528,16 @@ sub get {
 
         if ($atomic) {
             $atomic_local = $local;
+            $atomic_local_encoded = $local_encoded;
             $local .= sprintf("(%d).tmp", rand(10000));
+            $local_encoded = $sftp->_local_fs_encode($local);
             $atomic_numbered = $numbered;
             $numbered = 1;
             $debug and $debug & 128 and _debug("temporal local file name: $local");
         }
 
         if ($resume) {
-            if (CORE::open $fh, '+<', $local) {
+            if (CORE::open $fh, '+<', $local_encoded) {
                 binmode $fh;
 		CORE::seek($fh, 0, 2);
                 $askoff = CORE::tell $fh;
@@ -1583,17 +1574,18 @@ sub get {
                 my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
                 $flags |= Fcntl::O_APPEND if $append;
                 $flags |= Fcntl::O_EXCL if ($numbered or (!$overwrite and !$append));
-                unlink $local if $overwrite;
+                unlink $local_encoded if $overwrite;
                 while (1) {
                     my $open_perm = (defined $perm ? $perm : 0666);
                     my $save = _umask_save_and_set($umask);
-                    sysopen ($fh, $local, $flags, $open_perm) and last;
-                    unless ($numbered and -e $local) {
+                    sysopen ($fh, $local_encoded, $flags, $open_perm) and last;
+                    unless ($numbered and -e $local_encoded) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
                                           "Can't open $local", $!);
                         return undef;
                     }
                     _inc_numbered($local);
+                    $local_encoded = $sftp->_local_fs_encode($local);
                 }
                 $$numbered = $local if ref $numbered;
 		binmode $fh;
@@ -1605,12 +1597,12 @@ sub get {
             my $error;
 	    do {
                 local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-                unless (eval { CORE::chmod($perm, $local) > 0 }) {
+                unless (eval { CORE::chmod($perm, $local_encoded) > 0 }) {
                     $error = ($@ ? $@ : $!);
                 }
             };
 	    if ($error and !$best_effort) {
-                unlink $local unless $resume or $append;
+                unlink $local_encoded unless $resume or $append;
 		$sftp->_set_error(SFTP_ERR_LOCAL_CHMOD_FAILED,
 				  "Can't chmod $local", $error);
 		return undef
@@ -1757,7 +1749,7 @@ sub get {
             # performed to untaint data from the remote side.
 
             if ($copy_time) {
-                unless (utime($atime, $mtime, $local) or $best_effort) {
+                unless (utime($atime, $mtime, $local_encoded) or $best_effort) {
                     $sftp->_set_error(SFTP_ERR_LOCAL_UTIME_FAILED,
                                       "Can't utime $local", $!);
                     goto CLEANUP;
@@ -1772,20 +1764,20 @@ sub get {
                         # fails, non-overwriting is favoured over
                         # atomicity and an empty file is used to lock the
                         # path before atempting an overwriting rename.
-                        if (link $local, $atomic_local) {
-                            unlink $local;
+                        if (link $local_encoded, $atomic_local_encoded) {
+                            unlink $local_encoded;
                             last;
                         }
                         my $err = $!;
-                        unless (-e $atomic_local) {
-                            if (sysopen my $lock, $atomic_local,
+                        unless (-e $atomic_local_encoded) {
+                            if (sysopen my $lock, $atomic_local_encoded,
                                 Fcntl::O_CREAT|Fcntl::O_EXCL|Fcntl::O_WRONLY,
                                 0600) {
                                 $atomic_cleanup = 1;
                                 goto OVERWRITE;
                             }
                             $err = $!;
-                            unless (-e $atomic_local) {
+                            unless (-e $atomic_local_encoded) {
                                 $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
                                                   "Can't open $local", $err);
                                 goto CLEANUP;
@@ -1797,11 +1789,12 @@ sub get {
                             goto CLEANUP;
                         }
                         _inc_numbered($atomic_local);
+                        $atomic_local_encoded = $sftp->_local_fs_encode($atomic_local);
                     }
                 }
                 else {
                 OVERWRITE:
-                    unless (CORE::rename $local, $atomic_local) {
+                    unless (CORE::rename $local_encoded, $atomic_local_encoded) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_RENAME_FAILED,
                                           "Unable to rename temporal file to its final position '$atomic_local'", $!);
                         goto CLEANUP;
@@ -1812,8 +1805,8 @@ sub get {
 
         CLEANUP:
             if ($cleanup and $sftp->{_error}) {
-                unlink $local;
-                unlink $atomic_local if $atomic_cleanup;
+                unlink $local_encoded;
+                unlink $atomic_local_encoded if $atomic_cleanup;
             }
         }
     }; # autodie flag is restored here!
