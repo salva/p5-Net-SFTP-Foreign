@@ -2650,14 +2650,15 @@ sub rget {
 			 if ($fn =~ $reremote) {
 			     my $lpath = File::Spec->catdir($local, $1);
                              ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
-			     if (-d $lpath) {
+                             my $lpath_encoded = $sftp->_local_fs_encode($lpath);
+			     if (-d $lpath_encoded) {
 				 $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
 						   "directory '$lpath' already exists");
 				 $sftp->_call_on_error($on_error, $e);
 				 return 1;
 			     }
 			     else {
-				 if (CORE::mkdir $lpath, ($copy_perm ? $e->{a}->perm & 0777 : 0777)) {
+				 if (CORE::mkdir $lpath_encoded, ($copy_perm ? $e->{a}->perm & 0777 : 0777)) {
 				     $count++;
 				     return 1;
 				 }
@@ -2684,6 +2685,7 @@ sub rget {
 			     if ($fn =~ $reremote) {
 				 my $lpath = File::Spec->catfile($local, $1);
                                  ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
+                                 my $lpath_encoded = $sftp->_local_fs_encode($lpath);
 				 if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				     if ($sftp->get_symlink($fn, $lpath,
 							    # copy_time => $copy_time,
@@ -2693,7 +2695,7 @@ sub rget {
 				     }
 				 }
 				 elsif (_is_reg($e->{a}->perm)) {
-				     if ($newer_only and -e $lpath
+				     if ($newer_only and -e $lpath_encoded
 					 and (CORE::stat _)[9] >= $e->{a}->mtime) {
 					 $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
 							   "newer local file '$lpath' already exists");
