@@ -173,6 +173,26 @@ sub _call_on_error {
     $sftp->_set_status;
 }
 
+sub _remote_fs_encode {
+    my ($sftp, $path) = @_;
+    Encode::encode($sftp->{_remote_fs_encoding}, $path);
+}
+
+sub _remote_fs_decode {
+    my ($sftp, $path) = @_;
+    Encode::decode($sftp->{_remote_fs_encoding}, $path);
+}
+
+sub _local_fs_encode {
+    my ($sftp, $path) = @_;
+    Encode::encode($sftp->{_local_fs_encoding}, $path);
+}
+
+sub _local_fs_decode {
+    my ($sftp, $path) = @_;
+    Encode::decode($sftp->{_local_fs_encoding}, $path);
+}
+
 # this method code is a little convoluted because we are trying to
 # keep in memory as few entries as possible!!!
 sub find {

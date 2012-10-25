@@ -149,26 +149,6 @@ sub _croak_bad_options {
     }
 }
 
-sub _remote_fs_encode {
-    my ($sftp, $path) = @_;
-    Encode::encode($sftp->{_remote_fs_encoding}, $path);
-}
-
-sub _remote_fs_decode {
-    my ($sftp, $path) = @_;
-    Encode::decode($sftp->{_remote_fs_encoding}, $path);
-}
-
-sub _local_fs_encode {
-    my ($sftp, $path) = @_;
-    Encode::encode($sftp->{_local_fs_encoding}, $path);
-}
-
-sub _local_fs_decode {
-    my ($sftp, $path) = @_;
-    Encode::decode($sftp->{_local_fs_encoding}, $path);
-}
-
 sub new {
     ${^TAINT} and &_catch_tainted_args;
 
