@@ -2497,6 +2497,7 @@ sub get_symlink {
     my ($sftp, $remote, $local, %opts) = @_;
     my $overwrite = delete $opts{overwrite};
     my $numbered = delete $opts{numbered};
+    my $local_encoded = $sftp->_local_fs_encode($local);
 
     croak "'overwrite' and 'numbered' can not be used together"
 	if ($overwrite and $numbered);
@@ -2515,11 +2516,14 @@ sub get_symlink {
 
     # TODO: this is too weak, may contain race conditions.
     if ($numbered) {
-        _inc_numbered($local) while -e $local;
+        while (-e $local_encoded) {
+            _inc_numbered($local);
+            $local_encoded = $sftp->_local_fs_encode($local);
+        }
     }
-    elsif (-e $local) {
+    elsif (-e $local_encoded) {
 	if ($overwrite) {
-	    unlink $local;
+	    unlink $local_encoded;
 	}
 	else {
 	    $sftp->_set_error(SFTP_ERR_LOCAL_ALREADY_EXISTS,
@@ -2528,7 +2532,7 @@ sub get_symlink {
 	}
     }
 
-    unless (eval { CORE::symlink $link, $local }) {
+    unless (eval { CORE::symlink $sftp->_local_fs_encode($link), $local_encoded }) {
 	$sftp->_set_error(SFTP_ERR_LOCAL_SYMLINK_FAILED,
 			  "creation of symlink '$local' failed", $!);
 	return undef;
