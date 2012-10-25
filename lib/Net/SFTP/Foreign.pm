@@ -1338,7 +1338,7 @@ sub rename {
                 my $rp_old = $sftp->realpath($old);
                 my $rp_new = $sftp->realpath($new);
                 if (defined $rp_old and defined $rp_new and $rp_old eq $rp_new) {
-                    $sftp->_clear_error;
+                    $sftp->_clear_error_and_status;
                 }
                 elsif ($sftp->remove($new)) {
                     $overwrite = 0;
