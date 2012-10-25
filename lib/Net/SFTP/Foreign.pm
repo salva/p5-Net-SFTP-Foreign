@@ -3517,7 +3517,25 @@ support in the interpreter.
 
 =item fs_encoding =E<gt> $encoding
 
-Deprecated alias for remote_fs_encoding
+Deprecated alias for remote_fs_encoding.
+
+=item local_fs_encoding =E<gt> $encoding
+
+This option allows to set the character encoding for file names on the
+local file system. The default is to use UTF8 on Unix and Linux
+systems and cp1252 on Windows.
+
+On Windows, Perl is limited to single char encodings. This rules out
+UTF-8.
+
+If the module L<Encode::Locale> is installed, C<locale_fs> can be
+passed as the encoding. In that case, the module autodetects the file
+system encoding from the locale configuration.
+
+Versions of this module prior to 1.76 did not performed any
+conversion, reling on perl default and broken file name handling. This
+may result in a change of behaviour when operating over local files
+with non ASCII characters in their names.
 
 =item key_path =E<gt> $filename
 
@@ -5242,9 +5260,32 @@ and 2 respectively) that will cause the connection to fail.
 
 Specifically this is known to happen under mod_perl/mod_perl2.
 
+=item - Local file system encoding
+
+Perl handling of character encoding on file system operations is
+utterly broken. Depending on the internal, almost unpredictable,
+representation used by Perl to store strings, operations involving
+file names pass them encoded as C<latin1> or C<utf8>.
+
+This module works around this issue explicitly encoding/decoding any
+file name going/coming from the file system resulting in the correct
+behaviour as far as the file system encoding is correctly configured.
+
+If you want to access files from both Net::SFTP::Foreign and other
+parts of your program you should also do the encoding/decoding there.
+
+On Windows, the workaround is not perfect as it still relies on the
+Perl builtins for interfacing with the file system and those are
+limited to single char encodings (On Windows, two different sets of
+functions are allowed for interacting with the OS, one using 16bit
+wide-chars strings in UTF-16 and the other, used by perl, limited to
+single-char 8bit encodings).
+
 =back
 
 Also, the following features should be considered experimental:
+
+- local file names encoding
 
 - support for Tectia server
 
@@ -5296,7 +5337,7 @@ L<Net::SFTP> and L<Net::SSH2>.
 
 L<Test::SFTP> allows one to run tests against a remote SFTP server.
 
-L<autodie>.
+L<autodie>. L<Encode::Locale>.
 
 =head1 COPYRIGHT
 

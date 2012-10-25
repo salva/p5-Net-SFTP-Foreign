@@ -1,5 +1,13 @@
 Revision history for Net::SFTP::Foreign
 
+1.76_01
+        - add support for local_fs_encoding ***THIS IS MAYOR INTERNAL
+          CHANGE THAT CHANGES THE DEFAULT BEHAVIOR OF THE MODULE WHEN
+          USING NON-ASCII CHARACTERES ON FILE NAMES***
+        - fs_encoding renamed to remote_fs_encoding
+
+1.75
+
 1.74_04  Oct 25, 2012
         - overwriting rename of a file over itself was broken (bug
           report by Mike Wilder)
