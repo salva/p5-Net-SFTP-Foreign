@@ -226,7 +226,10 @@ sub new {
         $enc = delete $opts{fs_encoding} if not defined $enc and /remote/; # support deprecated name
         carp "$_ is not supported in this perl version ($])"
             if $] < 5.008 and defined $enc;
-        $sftp->{"_$_"} = (defined $enc ? $enc : 'utf8');
+
+        $sftp->{"_$_"} = ( defined $enc        ? $enc     :
+                           $windows && /local/ ? 'cp1252' :
+                                                 'utf8'   );
     }
 
     if ($sftp->{local_fs_encoding} =~ /^locale(?:_fs)?$/) {
