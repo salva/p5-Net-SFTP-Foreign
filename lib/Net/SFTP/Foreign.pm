@@ -229,6 +229,12 @@ sub new {
         $sftp->{"_$_"} = (defined $enc ? $enc : 'utf8');
     }
 
+    if ($sftp->{local_fs_encoding} =~ /^locale(?:_fs)?$/) {
+        eval { require Encode::Locale; 1 }
+            or croak "local file system encoding detection not available, "
+                . "Encode::Locale is not installed or failed to load: $@";
+    }
+
     $sftp->autodisconnect(delete $opts{autodisconnect});
 
     $backend->_init_transport($sftp, \%opts);
@@ -3501,7 +3507,7 @@ command to complete.
 When the timeout expires, the current method is aborted and
 the SFTP connection becomes invalid.
 
-=item fs_encoding =E<gt> $encoding
+=item remote_fs_encoding =E<gt> $encoding
 
 Version 3 of the SFTP protocol (the one supported by this module)
 knows nothing about the character encoding used on the remote
@@ -3512,7 +3518,8 @@ machine. The default value is C<utf8>.
 
 For instance:
 
-  $sftp = Net::SFTP::Foreign->new('user@host', fs_encoding => 'latin1');
+  $sftp = Net::SFTP::Foreign->new('user@host',
+                                  remote_fs_encoding => 'latin1');
 
 will convert any path name passed to any method in this package to its
 C<latin1> representation before sending it to the remote side.
@@ -3521,6 +3528,10 @@ Note that this option will not affect file contents in any way.
 
 This feature is not supported in perl 5.6 due to incomplete Unicode
 support in the interpreter.
+
+=item fs_encoding =E<gt> $encoding
+
+Deprecated alias for remote_fs_encoding
 
 =item key_path =E<gt> $filename
 

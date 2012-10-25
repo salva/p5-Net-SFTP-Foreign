@@ -16,6 +16,7 @@ Perl modules:
 	Sort::Key (optional, for better performance)
         IO::Pty and its dependencies (optional, only required if
           password authentication is going to be used)
+        Encode::Locale (optional, enable automatic locale detection)
 
 If the sftp-server command is available it will be used to perform
 some tests, but it is not mandatory.
