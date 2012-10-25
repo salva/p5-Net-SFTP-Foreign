@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.74_04';
+our $VERSION = '1.76_01';
 
 use strict;
 use warnings;
@@ -152,14 +152,14 @@ sub _croak_bad_options {
     }
 }
 
-sub _fs_encode {
+sub _remote_fs_encode {
     my ($sftp, $path) = @_;
-    Encode::encode($sftp->{_fs_encoding}, $path);
+    Encode::encode($sftp->{_remote_fs_encoding}, $path);
 }
 
-sub _fs_decode {
+sub _remote_fs_decode {
     my ($sftp, $path) = @_;
-    Encode::decode($sftp->{_fs_encoding}, $path);
+    Encode::decode($sftp->{_remote_fs_encoding}, $path);
 }
 
 sub new {
@@ -221,13 +221,12 @@ sub new {
     $sftp->{_timeout} = delete $opts{timeout};
     defined $sftp->{_timeout} and $sftp->{_timeout} <= 0 and croak "invalid timeout";
 
-    $sftp->{_fs_encoding} = delete $opts{fs_encoding};
-    if (defined $sftp->{_fs_encoding}) {
-        $] < 5.008
-            and carp "fs_encoding feature is not supported in this perl version $]";
-    }
-    else {
-        $sftp->{_fs_encoding} = 'utf8';
+    for (qw(remote_fs_encoding local_fs_encoding)) {
+        my $enc = delete $opts{$_};
+        $enc = delete $opts{fs_encoding} if not defined $enc and /remote/; # support deprecated name
+        carp "$_ is not supported in this perl version ($])"
+            if $] < 5.008 and defined $enc;
+        $sftp->{"_$_"} = (defined $enc ? $enc : 'utf8');
     }
 
     $sftp->autodisconnect(delete $opts{autodisconnect});
@@ -541,7 +540,7 @@ sub open {
     defined $flags or $flags = SSH2_FXF_READ;
     defined $a or $a = Net::SFTP::Foreign::Attributes->new;
     my $id = $sftp->_queue_new_msg(SSH2_FXP_OPEN,
-                                   str => $sftp->_fs_encode($path),
+                                   str => $sftp->_remote_fs_encode($path),
                                    int32 => $flags, attr => $a);
 
     my $rid = $sftp->_get_handle($id,
@@ -574,7 +573,7 @@ sub opendir {
     my $sftp = shift;
     my $path = shift;
     $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_str_request(SSH2_FXP_OPENDIR, $sftp->_fs_encode($path), @_);
+    my $id = $sftp->_queue_str_request(SSH2_FXP_OPENDIR, $sftp->_remote_fs_encode($path), @_);
     my $rid = $sftp->_get_handle($id, SFTP_ERR_REMOTE_OPENDIR_FAILED,
 				 "Couldn't open remote dir '$path'");
 
@@ -952,7 +951,7 @@ sub lstat {
     my ($sftp, $path) = @_;
     $path = '.' unless defined $path;
     $path = $sftp->_rel2abs($path);
-    my $id = $sftp->_queue_str_request(SSH2_FXP_LSTAT, $sftp->_fs_encode($path));
+    my $id = $sftp->_queue_str_request(SSH2_FXP_LSTAT, $sftp->_remote_fs_encode($path));
     if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
                                             SFTP_ERR_REMOTE_LSTAT_FAILED, "Couldn't stat remote link")) {
         return $msg->get_attributes;
@@ -968,7 +967,7 @@ sub stat {
     $pofh = '.' unless defined $pofh;
     my $id = $sftp->_queue_new_msg( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle'))
                                     ? ( SSH2_FXP_FSTAT, str => $sftp->_rid($pofh))
-                                    : ( SSH2_FXP_STAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh))) );
+                                    : ( SSH2_FXP_STAT,  str => $sftp->_remote_fs_encode($sftp->_rel2abs($pofh))) );
     if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_ATTRS, $id,
                                             SFTP_ERR_REMOTE_STAT_FAILED, "Couldn't stat remote file")) {
         return $msg->get_attributes;
@@ -993,7 +992,7 @@ sub _gen_remove_method {
 
         my ($sftp, $path) = @_;
         $path = $sftp->_rel2abs($path);
-        my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
+        my $id = $sftp->_queue_str_request($code, $sftp->_remote_fs_encode($path));
         return $sftp->_check_status_ok($id, $error, $errstr);
     };
     no strict 'refs';
@@ -1017,7 +1016,7 @@ sub mkdir {
     $attrs = _empty_attributes unless defined $attrs;
     $path = $sftp->_rel2abs($path);
     my $id = $sftp->_queue_str_request(SSH2_FXP_MKDIR,
-                                       $sftp->_fs_encode($path),
+                                       $sftp->_remote_fs_encode($path),
                                        $attrs);
     return $sftp->_check_status_ok($id,
                                    SFTP_ERR_REMOTE_MKDIR_FAILED,
@@ -1110,7 +1109,7 @@ sub setstat {
     my ($sftp, $pofh, $attrs) = @_;
     my $id = $sftp->_queue_new_msg( ( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle') )
                                       ? ( SSH2_FXP_FSETSTAT, str => $sftp->_rid($pofh) )
-                                      : ( SSH2_FXP_SETSTAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh)) ) ),
+                                      : ( SSH2_FXP_SETSTAT,  str => $sftp->_remote_fs_encode($sftp->_rel2abs($pofh)) ) ),
                                     attr => $attrs );
     return $sftp->_check_status_ok($id,
                                    SFTP_ERR_REMOTE_SETSTAT_FAILED,
@@ -1142,7 +1141,7 @@ sub _gen_setstat_shortcut {
         my $pofh = shift;
         my $id = $sftp->_queue_new_msg( ( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle') )
                                           ? ( SSH2_FXP_FSETSTAT, str => $sftp->$rid_method($pofh) )
-                                          : ( SSH2_FXP_SETSTAT,  str => $sftp->_fs_encode($sftp->_rel2abs($pofh)) ) ),
+                                          : ( SSH2_FXP_SETSTAT,  str => $sftp->_remote_fs_encode($sftp->_rel2abs($pofh)) ) ),
                                         int32 => $attrs_flag,
                                         map { $arg_types[$_] => $_[$_] } 0..$#arg_types );
         $sftp->_check_status_ok($id,
@@ -1225,8 +1224,8 @@ sub readdir {
 	    my $count = $msg->get_int32 or last;
 
 	    for (1..$count) {
-		push @$cache, { filename => $sftp->_fs_decode($msg->get_str),
-				longname => $sftp->_fs_decode($msg->get_str),
+		push @$cache, { filename => $sftp->_remote_fs_decode($msg->get_str),
+				longname => $sftp->_remote_fs_decode($msg->get_str),
 				a => $msg->get_attributes };
 	    }
 	}
@@ -1265,13 +1264,13 @@ sub _gen_getpath_method {
 
 	my ($sftp, $path) = @_;
 	$path = $sftp->_rel2abs($path);
-	my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
+	my $id = $sftp->_queue_str_request($code, $sftp->_remote_fs_encode($path));
 
 	if (my $msg = $sftp->_get_msg_and_check(SSH2_FXP_NAME, $id,
 						$error,
 						"Couldn't get $name for remote '$path'")) {
 	    $msg->get_int32 > 0
-		and return $sftp->_fs_decode($msg->get_str);
+		and return $sftp->_remote_fs_decode($msg->get_str);
 
 	    $sftp->_set_error($error,
 			      "Couldn't get $name for remote '$path', no names on reply")
@@ -1300,8 +1299,8 @@ sub _rename {
     $new = $sftp->_rel2abs($new);
 
     my $id = $sftp->_queue_new_msg(SSH2_FXP_RENAME,
-                                   str => $sftp->_fs_encode($old),
-                                   str => $sftp->_fs_encode($new));
+                                   str => $sftp->_remote_fs_encode($old),
+                                   str => $sftp->_remote_fs_encode($new));
 
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
@@ -1366,8 +1365,8 @@ sub atomic_rename {
 
     my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
                                    str => 'posix-rename@openssh.com',
-                                   str => $sftp->_fs_encode($old),
-                                   str => $sftp->_fs_encode($new));
+                                   str => $sftp->_remote_fs_encode($old),
+                                   str => $sftp->_remote_fs_encode($new));
 
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_RENAME_FAILED,
                             "Couldn't rename remote file '$old' to '$new'");
@@ -1382,8 +1381,8 @@ sub symlink {
     my ($sftp, $sl, $target) = @_;
     $sl = $sftp->_rel2abs($sl);
     my $id = $sftp->_queue_new_msg(SSH2_FXP_SYMLINK,
-                                   str => $sftp->_fs_encode($target),
-                                   str => $sftp->_fs_encode($sl));
+                                   str => $sftp->_remote_fs_encode($target),
+                                   str => $sftp->_remote_fs_encode($sl));
 
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_SYMLINK_FAILED,
                             "Couldn't create symlink '$sl' pointing to '$target'");
@@ -1404,8 +1403,8 @@ sub hardlink {
 
     my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
                                    str => 'hardlink@openssh.com',
-                                   str => $sftp->_fs_encode($target),
-                                   str => $sftp->_fs_encode($hl));
+                                   str => $sftp->_remote_fs_encode($target),
+                                   str => $sftp->_remote_fs_encode($hl));
     $sftp->_check_status_ok($id, SFTP_ERR_REMOTE_HARDLINK_FAILED,
                             "Couldn't create hardlink '$hl' pointing to '$target'");
 }
@@ -2380,7 +2379,7 @@ sub ls {
 
                 if ($cheap) {
                     for (1..$count) {
-                        my $fn = $sftp->_fs_decode($msg->get_str);
+                        my $fn = $sftp->_remote_fs_decode($msg->get_str);
                         push @dir, $fn if (!defined $cheap_wanted or $fn =~ $cheap_wanted);
                         $msg->skip_str;
                         Net::SFTP::Foreign::Attributes->skip_from_buffer($msg);
@@ -2388,8 +2387,8 @@ sub ls {
                 }
                 else {
                     for (1..$count) {
-                        my $fn = $sftp->_fs_decode($msg->get_str);
-                        my $ln = $sftp->_fs_decode($msg->get_str);
+                        my $fn = $sftp->_remote_fs_decode($msg->get_str);
+                        my $ln = $sftp->_remote_fs_decode($msg->get_str);
                         # my $a = $msg->get_attributes;
                         my $a = Net::SFTP::Foreign::Attributes->new_from_buffer($msg);
 
@@ -3014,7 +3013,7 @@ sub statvfs {
     my ($sftp, $pofh) = @_;
     my ($extension, $arg) = ( (ref $pofh and UNIVERSAL::isa($pofh, 'Net::SFTP::Foreign::FileHandle'))
                               ? ('fstatvfs@openssh.com', $sftp->_rid($pofh) )
-                              : ('statvfs@openssh.com' , $sftp->_fs_encode($sftp->_rel2abs($pofh)) ) );
+                              : ('statvfs@openssh.com' , $sftp->_remote_fs_encode($sftp->_rel2abs($pofh)) ) );
 
     $sftp->_check_extension($extension => 2,
                             SFTP_ERR_REMOTE_STATVFS_FAILED,
