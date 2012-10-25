@@ -19,7 +19,7 @@ plan skip_all => "tests not supported on inferior OS"
 
 my @new_args = new_args;
 
-plan tests => 793;
+plan tests => 809;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags SFTP_ERR_CONNECTION_BROKEN);
@@ -91,6 +91,9 @@ for my $setcwd (0, 1) {
 
         unlink $drfn_l;
         ok($sftp->rename($drfn1, $drfn), "rename - $i");
+        diag ($sftp->error) if $sftp->error;
+
+        ok($sftp->rename($drfn, $drfn, overwrite => 1));
         diag ($sftp->error) if $sftp->error;
 
         mktestfile($drfn1_l, $i, "blah, blah, blah...");
