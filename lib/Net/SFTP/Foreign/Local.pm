@@ -26,30 +26,33 @@ sub realpath {
 }
 
 sub stat {
+    my ($self, $fn) = @_;
     $! = 0;
-    my $a = Net::SFTP::Foreign::Attributes->new_from_stat(CORE::stat($_[1]));
+    my $a = Net::SFTP::Foreign::Attributes->new_from_stat(CORE::stat($self->_local_fs_encode($fn)));
     unless ($a) {
-	$_[0]->_set_error(SFTP_ERR_LOCAL_STAT_FAILED, "Couldn't stat local file '$_[1]'", $!);
+	$self->_set_error(SFTP_ERR_LOCAL_STAT_FAILED, "Couldn't stat local file '$fn'", $!);
     }
     $a
 }
 
 sub lstat {
+    my ($self, $fn) = @_;
     $! = 0;
-    my $a = Net::SFTP::Foreign::Attributes->new_from_stat(CORE::lstat($_[1]));
+    my $a = Net::SFTP::Foreign::Attributes->new_from_stat(CORE::lstat($self->_local_fs_encode($fn)));
     unless ($a) {
-	$_[0]->_set_error(SFTP_ERR_LOCAL_STAT_FAILED, "Couldn't stat local file '$_[1]'", $!);
+	$self->_set_error(SFTP_ERR_LOCAL_STAT_FAILED, "Couldn't stat local file '$fn'", $!);
     }
     $a
 }
 
 sub readlink {
+    my ($self, $fn) = @_;
     $! = 0;
-    my $target = readlink $_[1];
+    my $target = readlink $self->_local_fs_encode($fn);
     unless (defined $target) {
-	$_[0]->_set_error(SFTP_ERR_LOCAL_READLINK_FAILED, "Couldn't read link '$_[1]'", $!);
+	$self->_set_error(SFTP_ERR_LOCAL_READLINK_FAILED, "Couldn't read link '$fn'", $!);
     }
-    $target
+    $self->_local_fs_decode($target);
 }
 
 sub join {
@@ -75,11 +78,12 @@ sub ls {
 
     $! = 0;
 
-    opendir(my $ldh, $dir)
+    opendir(my $ldh, $self->_local_fs_encode($dir))
 	or return undef;
 
     my @dir;
     while (defined(my $part = readdir $ldh)) {
+        $part = $self->_local_fs_decode($part);
 	my $fn = File::Spec->join($dir, $part);
 	my $a = $self->lstat($fn);
 	if ($a and $follow_links and S_ISLNK($a->perm)) {
