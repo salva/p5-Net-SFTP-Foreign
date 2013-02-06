@@ -70,22 +70,30 @@ sub _set_error {
 	}
         $debug and $debug & 64 and _debug("_set_err code: $code, str: $str");
 	my $error = $sftp->{_error} = dualvar $code, $str;
+
+        # FIXME: use a better approach to determine when some error is fatal
         croak $error if $sftp->{_autodie};
-        return $error;
     }
     else {
-	return $sftp->{_error} = 0;
+        # FIXME: use a better approach to determine when some error is fatal
+        if ($sftp->{_error} != Net::SFTP::Foreign::Constants::SFTP_ERR_CONNECTION_BROKEN()) {
+            $sftp->{_error} = 0;
+        }
     }
+    return $sftp->{_error}
 }
 
 sub _clear_error_and_status {
     my $sftp = shift;
-    $sftp->{_error} = 0;
-    $sftp->{_status} = 0;
+    $sftp->_set_error;
+    $sftp->_set_status;
 }
 
 sub _copy_error {
-    $_[0]->{_error} = $_[1]->{_error};
+    my ($sftp, $other) = @_;
+    unless ($sftp->{_error} == Net::SFTP::Foreign::Constants::SFTP_ERR_CONNECTION_BROKEN()) {
+        $sftp->{_error} = $other->{_error};
+    }
 }
 
 sub error { shift->{_error} }
@@ -141,8 +149,7 @@ sub _call_on_error {
     my ($sftp, $on_error, $entry) = @_;
     $on_error and $sftp->error
 	and $on_error->($sftp, $entry);
-    $sftp->_set_error;
-    $sftp->_set_status;
+    $sftp->_clear_error_and_status;
 }
 
 # this method code is a little convoluted because we are trying to
@@ -347,7 +354,7 @@ sub glob {
                                            $e->{a} = $a;
                                        }
                                        else {
-                                           $sftp->_call_on_error($on_error, $e);
+                                           $on_error and $sftp->_call_on_error($on_error, $e);
                                            return undef;
                                        }
                                    }
@@ -359,7 +366,7 @@ sub glob {
                                            if ($realpath) {
                                                my $rp = $e->{realpath} = $sftp->realpath($e->{filename});
                                                unless (defined $rp) {
-                                                   $sftp->_call_on_error($on_error, $e);
+                                                   $on_error and $sftp->_call_on_error($on_error, $e);
                                                    return undef;
                                                }
                                            }
@@ -372,7 +379,7 @@ sub glob {
                                }
                                return undef
                            } )
-                    or $sftp->_call_on_error($on_error, $parent);
+                    or ($on_error and $sftp->_call_on_error($on_error, $parent));
             }
             else {
                 my $fn = $sftp->join($pfn, $part);
@@ -387,7 +394,7 @@ sub glob {
                             if ($realpath) {
                                 my $rp = $fn = $e->{realpath} = $sftp->realpath($fn);
                                 unless (defined $rp) {
-                                    $sftp->_call_on_error($on_error, $e);
+                                    $on_error and $sftp->_call_on_error($on_error, $e);
                                     next;
                                 }
                             }

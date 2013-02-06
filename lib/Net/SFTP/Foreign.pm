@@ -169,11 +169,13 @@ sub new {
     unshift @_, 'host' if @_ & 1;
     my %opts = @_;
 
-    my $sftp = { _msg_id => 0,
-		 _bout => '',
-		 _bin => '',
+    my $sftp = { _msg_id    => 0,
+		 _bout      => '',
+		 _bin       => '',
 		 _connected => 1,
-		 _queued => 0 };
+		 _queued    => 0,
+                 _error     => 0,
+                 _status    => 0 };
 
     bless $sftp, $class;
 
