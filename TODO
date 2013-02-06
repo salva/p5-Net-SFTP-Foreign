@@ -2,6 +2,9 @@
 TODO
 ====
 
+- audit fatal error handling, currently fatal errors can dissapear
+  under best_effort and other similar conditions
+
 - port to OpenVMS
 
 - add support for later protocol versions
