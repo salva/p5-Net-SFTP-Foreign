@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.74_01';
+our $VERSION = '1.74_05';
 
 use strict;
 use warnings;
@@ -444,10 +444,17 @@ sub _do_io {
                 }
             }
         }
+        elsif ($n == 0) {
+            $debug and $debug & 32 and _debug "_do_io select failed: timeout";
+            $sftp->_conn_lost(undef, undef, "Connection to remote server is broken: timeout");
+            return undef;
+        }
         else {
             $debug and $debug & 32 and _debug "_do_io select failed: $!";
-            next if ($n < 0 and ($! == Errno::EINTR() or $! == Errno::EAGAIN()));
-            return undef;
+            unless ($! == Errno::EINTR() or $! == Errno::EAGAIN()) {
+                $sftp->_conn_lost;
+                return undef;
+            }
         }
     }
 }
