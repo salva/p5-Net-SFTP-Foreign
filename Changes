@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.74_06  Mar 12, 2013
+        - disconnect may kill some unrelated process when called
+          repeatly (bug report by Douglas Wilson)
+        - debug was clobbering $!
+
 1.74_05  Feb 5, 2013
         - error was not being set on timeouts (bug report by Kqfh
           Jjgrn)
