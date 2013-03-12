@@ -1,6 +1,6 @@
      1 - message queueing/dequeuing
      2 - remote file/dir open/close
-     4 - DESTROY calls
+     4 - DESTROY and disconnect calls
      8 - hexdumps of incomming packets
     16 - hexdumps of outgoing packets
     32 - _do_io, _conn_lost
