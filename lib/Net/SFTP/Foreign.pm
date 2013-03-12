@@ -273,6 +273,7 @@ sub disconnect {
         if ($windows) {
 	    kill KILL => $pid
                 and waitpid($pid, 0);
+            $debug and $debug & 4 and _debug "process $pid reaped";
         }
         else {
 	    my $dirty = ( defined $sftp->{_dirty_cleanup}
@@ -280,6 +281,7 @@ sub disconnect {
 			  : $dirty_cleanup );
 
 	    if ($dirty or not defined $dirty) {
+                $debug and $debug & 4 and _debug("starting dirty cleanup of process $pid");
 		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
                     $debug and $debug & 4 and _debug("killing process $pid with signal $sig");
 		    $sig and kill $sig, $pid;
@@ -292,7 +294,6 @@ sub disconnect {
                         $wpr = waitpid($pid, 0);
                         alarm 0;
                     };
-
                     $debug and $debug & 4 and _debug("waitpid returned " . (defined $wpr ? $wpr : '<undef>'));
                     if ($wpr) {
                         # $wpr > 0 ==> the process has ben reaped
@@ -311,6 +312,7 @@ sub disconnect {
 		    }
 		}
 	    }
+            $debug and $debug & 4 and _debug "process $pid reaped";
         }
     }
     1
