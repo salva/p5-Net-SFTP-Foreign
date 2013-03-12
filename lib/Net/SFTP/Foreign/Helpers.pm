@@ -38,7 +38,7 @@ BEGIN {
 }
 
 sub _debug {
-    local $\;
+    local ($\, $!);
     my $caller = '';
     if ( $debug & 8192) {
 	$caller = (caller 1)[3];
@@ -55,6 +55,7 @@ sub _debug {
 }
 
 sub _hexdump {
+    local ($\, $!);
     no warnings qw(uninitialized);
     my $data = shift;
     while ($data =~ /(.{1,32})/smg) {
