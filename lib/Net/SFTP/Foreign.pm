@@ -260,7 +260,7 @@ sub autodisconnect {
 
 sub disconnect {
     my $sftp = shift;
-    my $pid = $sftp->{pid};
+    my $pid = delete $sftp->{pid};
 
     $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'').")");
 
@@ -281,24 +281,24 @@ sub disconnect {
 
 	    if ($dirty or not defined $dirty) {
 		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
+                    $debug and $debug & 4 and _debug("killing process $pid with signal $sig");
 		    $sig and kill $sig, $pid;
 
-		    my $except;
-		    {
-			local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-			eval {
-			    local $SIG{ALRM} = sub { die "timeout\n" };
-			    alarm 8;
-			    waitpid($pid, 0);
-			    alarm 0;
-			};
-			$except = $@;
-		    }
-		    if ($except) {
-			next if $except =~ /^timeout/;
-			die $except;
-		    }
-		    last;
+                    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+                    my $wpr;
+                    eval {
+                        local $SIG{ALRM} = sub { die "timeout\n" };
+                        alarm 8;
+                        $wpr = waitpid($pid, 0);
+                        alarm 0;
+                    };
+
+                    $debug and $debug & 4 and _debug("waitpid returned " . (defined $wpr ? $wpr : '<undef>'));
+                    if ($wpr) {
+                        # $wpr > 0 ==> the process has ben reaped
+                        # $wpr < 0 ==> some error happened, retry unless ECHILD
+                        last if $wpr > 0 or $! == Errno::ECHILD();
+                    }
 		}
 	    }
 	    else {
