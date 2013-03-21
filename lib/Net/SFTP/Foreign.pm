@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.74_06';
+our $VERSION = '1.74_07';
 
 use strict;
 use warnings;
@@ -648,25 +648,20 @@ sub seek {
     my ($sftp, $rfh, $pos, $whence) = @_;
     $sftp->flush($rfh) or return undef;
 
-    $whence ||= 0;
-
-    if ($whence == 0) {
-	return $rfh->_pos($pos)
+    if (!$whence) {
+        $rfh->_pos($pos)
     }
     elsif ($whence == 1) {
-	return $rfh->_inc_pos($pos)
+        $rfh->_inc_pos($pos)
     }
     elsif ($whence == 2) {
-	if (my $a = $sftp->stat($rfh)) {
-	    return $rfh->_pos($pos + $a->size);
-	}
-	else {
-	    return undef;
-	}
+	my $a = $sftp->stat($rfh) or return undef;
+        $rfh->_pos($pos + $a->size);
     }
     else {
-	croak "invalid whence argument";
+	croak "invalid value for whence argument ('$whence')";
     }
+    1;
 }
 
 sub tell {

@@ -19,7 +19,7 @@ plan skip_all => "tests not supported on inferior OS"
 
 my @new_args = new_args;
 
-plan tests => 809;
+plan tests => 811;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags SFTP_ERR_CONNECTION_BROKEN);
@@ -244,7 +244,8 @@ for my $setcwd (0, 1) {
 
     for my $pos (0, 1000, 0, 234, 4500, 1025) {
         my $d1;
-        is(seek($fh, $pos, 0), $pos, "seek");
+        seek($fh, $pos, 0);
+        is(tell($fh), $pos, "seek & tell");
         is(read($fh, my $data, $pos), $pos, "read");
         is($d1 = $sftp->sftpread($fh, $pos, $pos), $data, "sftpread");
         # D($d1, $data) and diag "got: $a\nexp: $b\n\n";
@@ -254,7 +255,7 @@ for my $setcwd (0, 1) {
             next unless $pos1 + $off >= 0;
             $pos1 += $off;
 
-            is(seek($fh, $off, 1), $pos1, "seek - 2");
+            ok(seek($fh, $off, 1), "seek - 2");
             is(tell($fh), $pos1, "tell"); # if $pos1 > 2000;
             is(read($fh, $data, $pos), $pos, "read - 2 ($pos1, $pos)");
             is($d1 = $sftp->sftpread($fh, $pos1, $pos), $data, "sftpread - 2 ($pos1, $pos)");
@@ -265,7 +266,8 @@ for my $setcwd (0, 1) {
 
     # D($ctn, $all, -10, 30) and diag "got: $a\nexp: $b\n\n";
 
-    is(seek($fh, 0, 0), 0, 'seek - 3');
+    ok(seek($fh, 0, 0), 'seek - 3');
+    is(tell($fh), 0, 'tell - 3');
     my $line = readline $fh;
 
     my $wfh = $sftp->open($drfn, SSH2_FXF_WRITE);
