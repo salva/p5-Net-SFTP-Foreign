@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.75';
+our $VERSION = '1.76_01';
 
 use strict;
 use warnings;
@@ -1712,6 +1712,7 @@ sub get {
 
             if (length($data) and defined $cb) {
                 # $size = $loff if ($loff > $size and $size != -1);
+                local $\;
                 $cb->($sftp, $data,
                       $lstart + $roff + $adjustment_before,
                       $lstart + $size + $adjustment);
@@ -1741,6 +1742,7 @@ sub get {
 
             if (length($data) and defined $cb) {
                 # $size = $loff if ($loff > $size and $size != -1);
+                local $\;
                 $cb->($sftp, $data, $askoff + $adjustment_before, $size + $adjustment);
                 goto CLEANUP if $sftp->{_error};
             }
@@ -1757,7 +1759,10 @@ sub get {
         # we call the callback one last time with an empty string;
         if (defined $cb) {
             my $data = '';
-            $cb->($sftp, $data, $askoff + $adjustment, $size + $adjustment);
+            do {
+                local $\;
+                $cb->($sftp, $data, $askoff + $adjustment, $size + $adjustment);
+            };
             return undef if $sftp->{_error};
             if (length($data) and !$dont_save) {
                 unless (print $fh $data) {
