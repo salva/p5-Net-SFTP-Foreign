@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Common;
 
-our $VERSION = '1.68_01';
+our $VERSION = '1.76_02';
 
 use strict;
 use warnings;
@@ -74,7 +74,7 @@ sub _set_error {
         # FIXME: use a better approach to determine when some error is fatal
         croak $error if $sftp->{_autodie};
     }
-    else {
+    elsif ($sftp->{_error}) {
         # FIXME: use a better approach to determine when some error is fatal
         if ($sftp->{_error} != Net::SFTP::Foreign::Constants::SFTP_ERR_CONNECTION_BROKEN()) {
             $sftp->{_error} = 0;
@@ -160,8 +160,7 @@ sub find {
     my $self = shift;
     my %opts = @_ & 1 ? ('dirs', @_) : @_;
 
-    $self->_set_error;
-    $self->_set_status;
+    $self->_clear_error_and_status;
 
     my $dirs = delete $opts{dirs};
     my $follow_links = delete $opts{follow_links};

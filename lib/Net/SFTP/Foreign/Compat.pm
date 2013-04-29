@@ -43,11 +43,12 @@ our %DEFAULTS = ( put => [best_effort => 1],
                   new => [] );
 
 BEGIN {
-    my @forbidden = qw( setcwd cwd open opendir sftpread sftpwrite seek
-                        tell eof write flush read getc lstat stat fstat
-                        remove rmdir mkdir setstat fsetstat close closedir
-                        readdir realpath readlink rename symlink abort
-                        get_content join glob rremove rget rput error );
+    my @forbidden = qw( setcwd cwd open opendir sftpread sftpwrite
+                        seek tell eof write flush read getc lstat stat
+                        fstat remove rmdir mkdir setstat fsetstat
+                        close closedir readdir realpath readlink
+                        rename symlink abort get_content join glob
+                        rremove rget rput error die_on_error );
 
     for my $method (@forbidden) {
         my $super = "SUPER::$method";

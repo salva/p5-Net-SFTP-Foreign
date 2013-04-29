@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.76_01';
+our $VERSION = '1.76_02';
 
 use strict;
 use warnings;
@@ -1686,7 +1686,7 @@ sub get {
 
             unless ($msg) {
                 if ($sftp->{_status} == SSH2_FX_EOF) {
-                    $sftp->_set_error();
+                    $sftp->_set_error;
                     $roff != $loff and next;
                 }
                 last;

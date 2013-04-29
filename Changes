@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.76_02  Apr 29, 2013
+        - remove warning happening when best_effort was set, specially
+          visible from Compat module (bug report by emerlyn at
+          PerlMonks)
+
 1.76_01  Apr 26, 2013
         - protect against callbacks setting $\ (bug report by Thomas
           Wadley)
