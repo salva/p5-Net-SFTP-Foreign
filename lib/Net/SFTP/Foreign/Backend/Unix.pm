@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Backend::Unix;
 
-our $VERSION = '1.74_01';
+our $VERSION = '1.76_03';
 
 use strict;
 use warnings;
@@ -271,7 +271,10 @@ sub _init_transport {
                 return;
             }
             $sftp->{pid} = $child;
-            $sftp->{_pty} = $pty;
+            open my $pty_dup, '+>&', $pty; # store pty as a file handler instead of a object in
+                                           # order to save it from being destroyed too early
+                                           # during global destruction
+            $sftp->{_pty} = $pty_dup;
 
             $debug and $debug & 65536 and _debug "starting password authentication";
             my $rv = '';

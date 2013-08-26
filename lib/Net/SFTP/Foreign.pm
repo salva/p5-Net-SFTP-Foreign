@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.76_02';
+our $VERSION = '1.76_03';
 
 use strict;
 use warnings;
@@ -315,6 +315,7 @@ sub disconnect {
             $debug and $debug & 4 and _debug "process $pid reaped";
         }
     }
+    close $sftp->{_pty} if defined $sftp->{_pty};
     1
 }
 
