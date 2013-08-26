@@ -1,5 +1,12 @@
 Revision history for Net::SFTP::Foreign
 
+1.76_03  Aug 26, 2013
+        - fix several spelling errors
+        - add spell checking test
+        - remove pod test from MANIFEST
+        - ensure that pty is not destroyed before main object (bug
+          report by Stephen Wylie) during global destruction
+
 1.76_02  Apr 29, 2013
         - remove warning happening when best_effort was set, specially
           visible from Compat module (bug report by emerlyn at
