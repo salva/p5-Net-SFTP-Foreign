@@ -232,7 +232,7 @@ __END__
 
 =head1 NAME
 
-Net::SFTP::Foreign::Compat - Adaptor for Net::SFTP compatibility
+Net::SFTP::Foreign::Compat - Adapter for Net::SFTP compatibility
 
 =head1 SYNOPSIS
 
@@ -262,7 +262,7 @@ to Net::SFTP::Foreign.
 
 The hash C<%Net::SFTP::Foreign::DEFAULTS> can be used to set default
 values for L<Net::SFTP::Foreign> methods called under the hood and
-otherwise not accesible through the Net::SFTP API.
+otherwise not accessible through the Net::SFTP API.
 
 The entries currently supported are:
 

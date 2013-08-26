@@ -3391,7 +3391,7 @@ from Net::SFTP as for instance C<find>, C<glob>, C<rget>, C<rput>,
 C<rremove>, C<mget>, C<mput>.
 
 On the other hand, using the external command means an additional
-proccess being launched and running, depending on your OS this could
+process being launched and running, depending on your OS this could
 eat more resources than the in process pure perl implementation
 provided by L<Net::SSH::Perl>.
 
@@ -3551,7 +3551,7 @@ protocol. But under some uncommon servers or configurations it is
 possible that a username is also requested.
 
 When this flag is set to C<1>, the username will be send
-inconditionally at the first remote prompt and then the password at
+unconditionally at the first remote prompt and then the password at
 the second.
 
 When it is set to C<auto> the module will use some heuristics in order
@@ -3683,7 +3683,7 @@ operations (see the C<put> or C<get> documentation).
 
 by default, and for performance reasons, write operations are cached,
 and only when the write buffer becomes big enough is the data written to
-the remote file. Setting this flag makes the write operations inmediate.
+the remote file. Setting this flag makes the write operations immediate.
 
 =item write_delay =E<gt> $bytes
 
@@ -3736,7 +3736,7 @@ Disconnect on exit from the current process only.
 
 =back
 
-See also the disconnect and autodisconnect methods.
+See also the C<disconnect> and C<autodisconnect> methods.
 
 =item late_set_perm =E<gt> $bool
 
@@ -3750,7 +3750,7 @@ section).
 =item backend => $backend
 
 From version 1.57 Net::SFTP::Foreign supports plugable backends in
-order to allow other ways to comunicate with the remote server in
+order to allow other ways to communicate with the remote server in
 addition to the default I<pipe-to-ssh-process>.
 
 Custom backends may change the set of options supported by the C<new>
@@ -3832,18 +3832,18 @@ copied from remote file. Default is to copy them.
 
 =item copy_perm =E<gt> $bool
 
-determines if permision attributes have to be copied from remote
+determines if permission attributes have to be copied from remote
 file. Default is to copy them after applying the local process umask.
 
 =item umask =E<gt> $umask
 
 allows one to select the umask to apply when setting the permissions
 of the copied file. Default is to use the umask for the current
-process or C<0> if the C<perm> option is algo used.
+process or C<0> if the C<perm> option is also used.
 
 =item perm =E<gt> $perm
 
-sets the permision mask of the file to be $perm, remote
+sets the permission mask of the file to be $perm, remote
 permissions are ignored.
 
 =item resume =E<gt> 1 | 'auto'
@@ -3878,8 +3878,8 @@ For instance:
     $sftp->get("data.txt", "data.txt", numbered => 1);
   }
 
-will copy the remote file as "data.txt" the first time and as
-"data(1).txt" the second one.
+will copy the remote file as C<data.txt> the first time and as
+C<data(1).txt> the second one.
 
 If a scalar reference is passed as the numbered value, the final
 target will be stored in the value pointed by the reference. For
@@ -3954,7 +3954,7 @@ C<stat> SFTP command before the data transfer starts).
 =item block_size =E<gt> $bytes
 
 size of the blocks the file is being split on for transfer.
-Incrementing this value can improve performance but some servers limit
+Incrementing this value can improve performance but most servers limit
 the maximum size.
 
 =item queue_size =E<gt> $size
@@ -4009,7 +4009,7 @@ copied from remote file. Default is to copy them.
 
 =item copy_perm =E<gt> $bool
 
-determines if permision attributes have to be copied from remote
+determines if permission attributes have to be copied from remote
 file. Default is to copy them after applying the local process umask.
 
 =item umask =E<gt> $umask
@@ -4020,7 +4020,7 @@ process.
 
 =item perm =E<gt> $perm
 
-sets the permision mask of the file to be $perm, umask and local
+sets the permission mask of the file to be $perm, umask and local
 permissions are ignored.
 
 =item overwrite =E<gt> 0
@@ -4062,7 +4062,7 @@ overwriting/non-overwriting atomic rename operation free of race
 conditions.
 
 OpenSSH server does it correctly on top of Linux/UNIX native file
-systems (i.e. ext[234], ffs or zfs) but has problems on file systems
+systems (i.e. ext[234]>, ffs or zfs) but has problems on file systems
 not supporting hard links (i.e. FAT) or on operating systems with
 broken POSIX semantics as Windows.
 
@@ -4088,7 +4088,7 @@ this option. See L</On the fly data conversion> below.
 
 =item callback =E<gt> $callback
 
-C<$callback> is a reference to a subrutine that will be called after
+C<$callback> is a reference to a subroutine that will be called after
 every iteration of the upload process.
 
 The callback function will receive as arguments: the current
@@ -4173,8 +4173,8 @@ directories):
 
 =item wanted =E<gt> qr/.../
 
-Only elements whose filename matchs the regular expression are included
-on the listing.
+Only elements whose name matches the given regular expression are
+included on the listing.
 
 =item wanted =E<gt> sub {...}
 
@@ -4197,7 +4197,7 @@ before). For instance:
 
 =item no_wanted =E<gt> sub {...}
 
-those options have the oposite result to their C<wanted> counterparts:
+those options have the opposite result to their C<wanted> counterparts:
 
   my $no_hidden = $sftp->ls( '/home/homer',
 			     no_wanted => qr/^\./ )
@@ -4216,8 +4216,8 @@ the list of entries is ordered by filename.
 
 by default, the attributes on the listing correspond to a C<lstat>
 operation, setting this option causes the method to perform C<stat>
-requests instead. C<lstat> attributes will stil appear for links
-pointing to non existant places.
+requests instead. C<lstat> attributes will still appear for links
+pointing to non existent places.
 
 =item atomic_readdir =E<gt> 1
 
@@ -4290,18 +4290,18 @@ high latency.
 By default symbolic links are not resolved and appear as that on the
 final listing. This option causes then to be resolved and substituted
 by the target file system object. Dangling links are ignored, though
-they generate a call to the C<on_error> callback when stat'ing them
-fails.
+they generate a call to the C<on_error> callback when stat fails on
+them.
 
-Following sym links can introduce loops on the search. Infinite loops
-are detected and broken but files can still appear repeated on the
-final listing under different names unless the option C<realpath> is
-also actived.
+Following symbolic links can introduce loops on the search. Infinite
+loops are detected and broken but files can still appear repeated on
+the final listing under different names unless the option C<realpath>
+is also active.
 
 =item ordered =E<gt> 1
 
 By default, the file system is searched in an implementation dependent
-order (actually optimized for low memory comsumption). If this option
+order (actually optimized for low memory consumption). If this option
 is included, the file system is searched in a deep-first, sorted by
 filename fashion.
 
@@ -4349,7 +4349,7 @@ search, discarding full subdirectories. For instance:
 
 C<descend> and C<wanted> rules are unrelated. A directory discarded by
 a C<wanted> rule will still be recursively searched unless it is also
-discarded on a C<descend> rule and vice-versa.
+discarded on a C<descend> rule and vice versa.
 
 =item atomic_readdir =E<gt> 1
 
@@ -4373,7 +4373,7 @@ in the same format as the L</find> method.
 
 This method tries to recover and continue under error conditions.
 
-The given pattern can be a Unix style pattern (see L<glob(7)>) or a
+The given pattern can be a UNIX style pattern (see L<glob(7)>) or a
 Regexp object (i.e C<qr/foo/>). In the later case, only files on the
 current working directory will be matched against the Regexp.
 
@@ -4391,7 +4391,7 @@ This flag is ignored when a Regexp object is used as the pattern.
 =item strict_leading_dot =E<gt> 0
 
 by default, a dot character at the beginning of a file or directory
-name is not matched by willcards (C<*> or C<?>). Setting this flags to
+name is not matched by wildcards (C<*> or C<?>). Setting this flags to
 a false value changes this behaviour.
 
 This flag is ignored when a Regexp object is used as the pattern.
@@ -4429,7 +4429,7 @@ Some usage samples:
 
 Recursively copies the contents of remote directory C<$remote> to
 local directory C<$local>. Returns the total number of elements
-(files, dirs and symbolic links) successfully copied.
+(files, directories and symbolic links) successfully copied.
 
 This method tries to recover and continue when some error happens.
 
@@ -4618,7 +4618,8 @@ For instance:
 The method accepts all the options valid for L</glob> and for L</get>
 (except those that do not make sense :-)
 
-C<$localdir> is optional and defaults to the process cwd.
+C<$localdir> is optional and defaults to the process current working
+directory (C<cwd>).
 
 Files are saved with the same name they have in the remote server
 excluding the directory parts.
@@ -4641,7 +4642,7 @@ files from the local side to the remote one.
 =item $sftp-E<gt>join(@paths)
 
 returns the given path fragments joined in one path (currently the
-remote file system is expected to be Unix like).
+remote file system is expected to be UNIX like).
 
 =item $sftp-E<gt>open($path, $flags [, $attrs ])
 
@@ -4686,7 +4687,7 @@ Force all writes to append data at the end of the file.
 
 As OpenSSH SFTP server implementation ignores this flag, the module
 emulates it (I will appreciate receiving feedback about the
-interoperation of this module with other server implementations when
+inter-operation of this module with other server implementations when
 this flag is used).
 
 =item SSH2_FXF_CREAT
@@ -4716,7 +4717,7 @@ L<Net::SFTP::Foreign::Attributes>.
 Closes the remote file handle C<$handle>.
 
 Files are automatically closed on the handle C<DESTROY> method when
-not done explicitelly.
+not done explicitly.
 
 Returns true on success and undef on failure.
 
@@ -4855,7 +4856,7 @@ this method is deprecated.
 
 =item $sftp-E<gt>utime($path_or_fh, $atime, $mtime)
 
-Shortcuts around setstat.
+Shortcuts around C<setstat> method.
 
 =item $sftp-E<gt>remove($path)
 
@@ -4876,7 +4877,7 @@ Returns a true value on success and undef on failure.
 
 =item $sftp-E<gt>mkpath($path, $attrs)
 
-This method is similar to C<mkdir> but also creates any non-existant
+This method is similar to C<mkdir> but also creates any non-existent
 parent directories recursively.
 
 =item $sftp-E<gt>rmdir($path)
@@ -4904,7 +4905,7 @@ Accepted options are:
 =item overwrite => $bool
 
 By default, the rename operation fails when a file C<$new> already
-exists. When this options is set, any previous existant file is
+exists. When this options is set, any previous existent file is
 deleted first (the C<atomic_rename> operation will be used if
 available).
 
@@ -4923,7 +4924,7 @@ Unlike the C<rename> method, it overwrites any previous C<$new> file.
 =item $sftp-E<gt>readlink($path)
 
 Sends a C<SSH_FXP_READLINK> command to read the path where the
-simbolic link is pointing.
+symbolic link is pointing.
 
 Returns the target path on success and undef on failure.
 
@@ -5004,15 +5005,15 @@ values:
 =item conversion =E<gt> 'dos2unix'
 
 Converts CR+LF line endings (as commonly used under MS-DOS) to LF
-(Unix).
+(UNIX).
 
 =item conversion =E<gt> 'unix2dos'
 
-Converts LF line endings (Unix) to CR+LF (DOS).
+Converts LF line endings (UNIX) to CR+LF (DOS).
 
 =item conversion =E<gt> sub { CONVERT $_[0] }
 
-When a callback is given, it is invoked repeatly as chunks of data
+When a callback is given, it is invoked repeatedly as chunks of data
 become available. It has to change C<$_[0]> in place in order to
 perform the conversion.
 
@@ -5112,7 +5113,7 @@ B<Q>: What is C<plink>?
 B<A>: Plink is a command line tool distributed with the
 L<PuTTY|http://the.earth.li/~sgtatham/putty/> SSH client. Very popular
 between MS Windows users, it is also available for Linux and other
-Unixes now.
+UNIX now.
 
 =item Put method fails
 
@@ -5138,10 +5139,10 @@ work-around automatically.
 =item Put method fails even with late_set_perm set
 
 B<Q>: I added C<late_set_perm =E<gt> 1> to the put call, but we are still
-receiving the error "Couldn't setstat remote file (setstat)".
+receiving the error C<Couldn't setstat remote file (setstat)>.
 
 B<A>: Some servers forbid the SFTP C<setstat> operation used by the
-C<put> method for replicating the file permissions and timestamps on
+C<put> method for replicating the file permissions and time-stamps on
 the remote side.
 
 As a work around you can just disable the feature:
@@ -5225,7 +5226,7 @@ are welcome!
 
 =item - Dirty cleanup:
 
-On some operating systems, closing the pipes used to comunicate with
+On some operating systems, closing the pipes used to communicate with
 the slave SSH process does not terminate it and a work around has to
 be applied. If you find that your scripts hung when the $sftp object
 gets out of scope, try setting C<$Net::SFTP::Foreign::dirty_cleanup>

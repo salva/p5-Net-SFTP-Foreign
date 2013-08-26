@@ -305,7 +305,7 @@ field. The flags field is adjusted accordingly.
 
 =item $attrs-E<gt>set_perm($perm)
 
-sets the value of the permsissions field or removes it if the value is
+sets the value of the permissions field or removes it if the value is
 undefined. The flags field is also adjusted.
 
 =item $attr-E<gt>set_ugid($uid, $gid)
@@ -313,7 +313,7 @@ undefined. The flags field is also adjusted.
 sets the values of the uid and gid fields, or removes them if they are
 undefined values. The flags field is adjusted.
 
-This pair of fields can not be set separatelly because they share the
+This pair of fields can not be set separately because they share the
 same bit on the flags field and so both have to be set or not.
 
 =item $attr-E<gt>set_amtime($atime, $mtime)

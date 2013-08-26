@@ -34,7 +34,7 @@ __END__
 
 =head1 NAME
 
-Net::SFTP::Foreign::Attributes::Compat - adaptor for Net::SFTP::Attributes compatibility
+Net::SFTP::Foreign::Attributes::Compat - adapter for Net::SFTP::Attributes compatibility
 
 =head1 SYNOPSIS
 

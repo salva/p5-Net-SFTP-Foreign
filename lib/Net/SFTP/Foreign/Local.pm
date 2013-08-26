@@ -112,7 +112,7 @@ __END__
 
 =head1 NAME
 
-Net::SFTP::Foreign::Local - access local fs with Net::SFTP::Foreign API.
+Net::SFTP::Foreign::Local - access local file system through Net::SFTP::Foreign API.
 
 =head1 SYNOPSIS
 
