@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.76_04
+        - don't force permissions from rput when copy_perm is unset
+
 1.76_03  Aug 26, 2013
         - fix several spelling errors
         - add spell checking test

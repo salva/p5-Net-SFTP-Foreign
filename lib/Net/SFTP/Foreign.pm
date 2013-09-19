@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.76_03';
+our $VERSION = '1.76_04';
 
 use strict;
 use warnings;
@@ -2870,7 +2870,9 @@ sub rput {
 				    }
 				    else {
 					if ($sftp->put($fn, $rpath,
-						       perm => ($copy_perm ? $e->{a}->perm : 0777) & $mask,
+                                                       ($copy_perm
+                                                        ? (perm  => $e->{a}->perm & 0777 & $mask)
+                                                        : (umask => $umask) ),
 						       copy_time => $copy_time,
                                                        %put_opts)) {
 					    $count++;
@@ -3978,9 +3980,9 @@ same effect as for the C<get> method.
 
 =item $sftp-E<gt>put($local, $remote, %opts)
 
-Uploads a file C<$local> from the local host to the remote host, and
-saves it as C<$remote>. By default file attributes are also
-copied. For instance:
+Uploads a file C<$local> from the local host to the remote host saving
+it as C<$remote>. By default file attributes are also copied. For
+instance:
 
   $sftp->put("test.txt", "test.txt")
     or die "put failed: " . $sftp->error;
@@ -3988,9 +3990,9 @@ copied. For instance:
 A file handle can also be passed in the C<$local> argument. In that
 case, data is read from there and stored in the remote file. UTF8 data
 is not supported unless a custom converter callback is used to
-transform it to bytes and the method will croak if it encounters any
-data in perl internal UTF8 format. Note also that the handle is not
-closed when the transmission finish.
+transform it to bytes. The method will croak if it encounters any data
+in perl internal UTF8 format. Note also that the handle is not closed
+when the transmission finish.
 
 Example:
 
@@ -4031,8 +4033,8 @@ method fail in that case.
 
 =item numbered =E<gt> 1
 
-when required, adds a sequence number to local file names in order to
-avoid overwriting pre-existent files. Off by default.
+when set, a sequence number is added to the remote file name in order
+to avoid overwriting pre-existent files. Off by default.
 
 =item append =E<gt> 1
 
@@ -4068,13 +4070,11 @@ broken POSIX semantics as Windows.
 
 =item cleanup =E<gt> 1
 
-If the transfer fails, attempts to remove the incomplete file.
+If the transfer fails, attempts to remove the incomplete file. Cleanup
+may fail (for example, if the SSH connection gets broken).
 
-Cleanup may fail if for example the SSH connection gets broken.
-
-This option is set to by default when there is not possible to resume
-the transfer afterwards (i.e., when using `atomic` or `numbered`
-options).
+This option is set by default when the transfer is not resumable
+(i.e., when using `atomic` or `numbered` options).
 
 =item best_effort =E<gt> 1
 
