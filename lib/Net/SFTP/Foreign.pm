@@ -1837,12 +1837,11 @@ sub get {
                 }
                 $$atomic_numbered = $local if ref $atomic_numbered;
             }
-
-        CLEANUP:
-            if ($cleanup and $sftp->{_error}) {
-                unlink $local;
-                unlink $atomic_local if $atomic_cleanup;
-            }
+        }
+    CLEANUP:
+        if ($cleanup and $sftp->{_error}) {
+            unlink $local;
+            unlink $atomic_local if $atomic_cleanup;
         }
     }; # autodie flag is restored here!
 

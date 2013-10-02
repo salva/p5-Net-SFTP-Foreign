@@ -1,6 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
-1.76_04
+1.76_04  Oct 2, 2013
+        - fix 'Use of "goto" to jump into a construct is deprecated'
+          warning (bug report by Brent Bates)
         - don't force permissions from rput when copy_perm is unset
 
 1.76_03  Aug 26, 2013
