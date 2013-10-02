@@ -15,6 +15,10 @@ TODO
 
 - implement save_status methods as a wrapper like best_effort
 
+- reimplement autodie in a saner way
+
+- allow per-method enabling/disabling autodie
+
 DONE
 ==== 
 
