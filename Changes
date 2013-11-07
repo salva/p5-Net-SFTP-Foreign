@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.77  Nov 5, 2013
+        - release as stable
+        - fix misspellings in error message
+
 1.76_04  Oct 2, 2013
         - fix 'Use of "goto" to jump into a construct is deprecated'
           warning (bug report by Brent Bates)
