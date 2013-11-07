@@ -150,13 +150,13 @@ sub _init_transport {
                           delete($opts->{asks_for_username_at_login}) );
                 if ($ask_for_username_at_login) {
                     croak "ask_for_username_at_login set but user was not given" unless defined $user;
-                    croak "ask_for_username_at_login set can not be user with a custom password prompt"
+                    croak "ask_for_username_at_login can not be used with a custom password prompt"
                         if defined $password_prompt;
                 }
             }
         }
 
-        my $expect_log_user = delete $opts->{expect_log_user} || 0;
+        delete $opts->{expect_log_user}; # backward compatibility, not used anymore
 	my $stderr_discard = delete $opts->{stderr_discard};
 	my $stderr_fh = ($stderr_discard ? undef : delete $opts->{stderr_fh});
         my $open2_cmd = delete $opts->{open2_cmd};
