@@ -209,6 +209,13 @@ sub append_extended {
     }
 }
 
+sub clone {
+    my $self = shift;
+    my $clone = { %$self };
+    bless $clone, ref $self;
+    $clone;
+}
+
 1;
 __END__
 

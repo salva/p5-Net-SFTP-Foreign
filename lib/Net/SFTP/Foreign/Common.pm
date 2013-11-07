@@ -91,7 +91,8 @@ sub _clear_error_and_status {
 
 sub _copy_error {
     my ($sftp, $other) = @_;
-    unless ($sftp->{_error} == Net::SFTP::Foreign::Constants::SFTP_ERR_CONNECTION_BROKEN()) {
+    unless ($sftp->{_error} and
+            $sftp->{_error} == Net::SFTP::Foreign::Constants::SFTP_ERR_CONNECTION_BROKEN()) {
         $sftp->{_error} = $other->{_error};
     }
 }

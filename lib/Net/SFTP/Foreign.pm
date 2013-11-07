@@ -11,6 +11,7 @@ use Carp qw(carp croak);
 use Symbol ();
 use Errno ();
 use Fcntl;
+use File::Spec ();
 
 BEGIN {
     if ($] >= 5.008) {
@@ -571,6 +572,27 @@ sub open {
     $fh;
 }
 
+sub _open_mkpath {
+    my ($sftp, $filename, $mkpath, $flags, $attrs) = @_;
+    $flags = ($flags || 0) | SSH2_FXF_WRITE|SSH2_FXF_CREAT;
+    my $fh = do {
+        local $sftp->{_autodie};
+        $sftp->open($filename, $flags, $attrs);
+    };
+    unless ($fh) {
+        if ($mkpath and $sftp->status == SSH2_FX_NO_SUCH_FILE) {
+            my $da = $attrs->clone;
+            $da->set_perm(($da->perm || 0) | 0700);
+            $sftp->mkpath($filename, $da, 1) or return;
+            $fh = $sftp->open($filename, $flags, $attrs);
+        }
+        else {
+            $sftp->_ok_or_autodie;
+        }
+    }
+    $fh;
+}
+
 ## SSH2_FXP_OPENDIR (11)
 sub opendir {
     @_ == 2 or croak 'Usage: $sftp->opendir($path)';
@@ -994,7 +1016,7 @@ sub _gen_remove_method {
         my ($sftp, $path) = @_;
         $path = $sftp->_rel2abs($path);
         my $id = $sftp->_queue_str_request($code, $sftp->_fs_encode($path));
-        return $sftp->_check_status_ok($id, $error, $errstr);
+        $sftp->_check_status_ok($id, $error, $errstr);
     };
     no strict 'refs';
     *$name = $sub;
@@ -1019,9 +1041,9 @@ sub mkdir {
     my $id = $sftp->_queue_str_request(SSH2_FXP_MKDIR,
                                        $sftp->_fs_encode($path),
                                        $attrs);
-    return $sftp->_check_status_ok($id,
-                                   SFTP_ERR_REMOTE_MKDIR_FAILED,
-                                   "Couldn't create remote directory");
+    $sftp->_check_status_ok($id,
+                            SFTP_ERR_REMOTE_MKDIR_FAILED,
+                            "Couldn't create remote directory");
 }
 
 sub join {
@@ -1057,17 +1079,24 @@ sub _rel2abs {
 }
 
 sub mkpath {
-    (@_ >= 2 and @_ <= 3)
-        or croak 'Usage: $sftp->mkpath($path [, $attrs])';
+    (@_ >= 2 and @_ <= 4)
+        or croak 'Usage: $sftp->mkpath($path [, $attrs [, $parent]])';
     ${^TAINT} and &_catch_tainted_args;
 
-    my ($sftp, $path, $attrs) = @_;
+    my ($sftp, $path, $attrs, $parent) = @_;
     $sftp->_clear_error_and_status;
-
+    my $first = !$parent; # skips file name
     $path =~ s{^(/*)}{};
     my $start = $1;
+    $path =~ s{/+$}{};
     my @path;
     while (1) {
+        if ($first) {
+            $first = 0
+        }
+        else {
+            $path =~ s{/*[^/]*$}{}
+        }
 	my $p = "$start$path";
 	$debug and $debug & 8192 and _debug "checking $p";
 	if ($sftp->test_d($p)) {
@@ -1080,7 +1109,7 @@ sub mkpath {
 	    return undef;
 	}
 	unshift @path, $p;
-	$path =~ s{/*[^/]*$}{};
+
     }
     for my $p (@path) {
 	$debug and $debug & 8192 and _debug "mkdir $p";
@@ -1102,6 +1131,51 @@ sub mkpath {
     1;
 }
 
+sub _mkpath_local {
+    my ($sftp, $path, $perm, $parent) = @_;
+    my @parts = File::Spec->splitdir($path);
+    my @tail;
+    if ($debug and $debug & 32768) {
+        my $target = File::Spec->join(@parts);
+        _debug "_mkpath_local('$target')";
+    }
+    if ($parent) {
+        pop @parts while @parts and not length $parts[-1];
+        @parts or goto top_dir_reached;
+        pop @parts;
+    }
+    while (1) {
+        my $target = File::Spec->join(@parts);
+        if (-e $target) {
+            if (-d $target) {
+                while (@tail) {
+                    $target = File::Spec->join($target, shift(@tail));
+                    $debug and $debug and 32768 and _debug "creating local directory $target";
+                    unless (CORE::mkdir $target, $perm) {
+                        unless (do { local $!; -d $target}) {
+                            $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
+                                              "mkdir '$target' failed", $!);
+                            return;
+                        }
+                    }
+                }
+                return 1;
+            }
+            else {
+                $sftp->_set_error(SFTP_ERR_LOCAL_BAD_OBJECT,
+                                  "Local file '$target' is not a directory");
+                return;
+            }
+        }
+        @parts or last;
+        unshift @tail, pop @parts;
+    }
+
+ top_dir_reached:
+    $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
+                      "mkpath failed, top dir reached");
+    return;
+}
 
 sub setstat {
     @_ == 3 or croak 'Usage: $sftp->setstat($path_or_fh, $attrs)';
@@ -1467,6 +1541,7 @@ sub get {
     my $cleanup = delete $opts{cleanup};
     my $atomic = delete $opts{atomic};
     my $best_effort = delete $opts{best_effort};
+    my $mkpath = delete $opts{mkpath};
 
     croak "'perm' and 'copy_perm' options can not be used simultaneously"
 	if (defined $perm and defined $copy_perm);
@@ -1494,6 +1569,7 @@ sub get {
     $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
+    $mkpath    = 1 unless defined $mkpath;
     $cleanup = ($atomic || $numbered) unless defined $cleanup;
 
     my $a = do {
@@ -1607,9 +1683,10 @@ sub get {
                 $flags |= Fcntl::O_APPEND if $append;
                 $flags |= Fcntl::O_EXCL if ($numbered or (!$overwrite and !$append));
                 unlink $local if $overwrite;
+                my $open_perm = (defined $perm ? $perm : 0666);
+                my $save = _umask_save_and_set($umask);
+                $sftp->_mkpath_local($local, $perm|0700, 1) if $mkpath;
                 while (1) {
-                    my $open_perm = (defined $perm ? $perm : 0666);
-                    my $save = _umask_save_and_set($umask);
                     sysopen ($fh, $local, $flags, $open_perm) and last;
                     unless ($numbered and -e $local) {
                         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED,
@@ -1897,6 +1974,7 @@ sub put {
     my $cleanup = delete $opts{cleanup};
     my $best_effort = delete $opts{best_effort};
     my $sparse = delete $opts{sparse};
+    my $mkpath = delete $opts{mkpath};
 
     croak "'perm' and 'umask' options can not be used simultaneously"
 	if (defined $perm and defined $umask);
@@ -1918,6 +1996,7 @@ sub put {
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
     $late_set_perm = $sftp->{_late_set_perm} unless defined $late_set_perm;
     $cleanup = ($atomic || $numbered) unless defined $cleanup;
+    $mkpath = 1 unless defined $mkpath;
 
     my $neg_umask;
     if (defined $perm) {
@@ -2116,9 +2195,10 @@ sub put {
         local $sftp->{_autodie};
 	if ($numbered) {
             while (1) {
-                $rfh = $sftp->open($remote,
-                                   SSH2_FXF_WRITE | SSH2_FXF_CREAT | SSH2_FXF_EXCL,
-                                   $attrs);
+                $rfh = $sftp->_open_mkpath($remote,
+                                          $mkpath,
+                                          SSH2_FXF_WRITE | SSH2_FXF_CREAT | SSH2_FXF_EXCL,
+                                          $attrs);
                 last if ($rfh or
                          $sftp->{_status} != SSH2_FX_FAILURE or
                          !$sftp->test_e($remote));
@@ -2132,10 +2212,11 @@ sub put {
             # first we try to open the remote file and if it fails due
             # to a permissions error then we remove it and try again.
             for my $rep (0, 1) {
-                $rfh = $sftp->open($remote,
-                                   SSH2_FXF_WRITE | SSH2_FXF_CREAT |
-                                   ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL),
-                                   $attrs);
+                $rfh = $sftp->_open_mkpath($remote,
+                                           $mkpath,
+                                           SSH2_FXF_WRITE | SSH2_FXF_CREAT |
+                                           ($overwrite ? SSH2_FXF_TRUNC : SSH2_FXF_EXCL),
+                                           $attrs);
 
                 last if $rfh or $rep or !$overwrite or $sftp->{_status} != SSH2_FX_PERMISSION_DENIED;
 
@@ -2311,7 +2392,7 @@ sub put_content {
     my ($sftp, undef, $remote, %opts) = @_;
     my %put_opts = ( map { $_ => delete $opts{$_} }
                      qw(perm umask block_size queue_size overwrite conversion resume
-                        numbered late_set_perm atomic best_effort));
+                        numbered late_set_perm atomic best_effort mkpath));
     %opts and _croak_bad_options(keys %opts);
 
     my $fh;
@@ -2624,6 +2705,7 @@ sub rget {
     my $on_error = delete $opts{on_error};
     local $sftp->{_autodie} if $on_error;
     my $ignore_links = delete $opts{ignore_links};
+    my $mkpath = delete $opts{mkpath};
 
     # my $relative_links = delete $opts{relative_links};
 
@@ -2652,8 +2734,7 @@ sub rget {
 
     $copy_perm = 1 unless defined $copy_perm;
     $copy_time = 1 unless defined $copy_time;
-
-    require File::Spec;
+    $mkpath    = 1 unless defined $mkpath;
 
     my $count = 0;
     $sftp->find( [$remote],
@@ -2672,14 +2753,14 @@ sub rget {
 				 return 1;
 			     }
 			     else {
-				 if (CORE::mkdir $lpath, ($copy_perm ? $e->{a}->perm & 0777 : 0777)) {
+                                 my $perm = ($copy_perm ? $e->{a}->perm & 0777 : 0777);
+                                 if (CORE::mkdir($lpath, $perm) or
+                                     ($mkpath and $sftp->_mkpath_local($lpath, $perm))) {
 				     $count++;
 				     return 1;
 				 }
-				 else {
-				     $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
-						       "mkdir '$lpath' failed", $!);
-				 }
+                                 $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
+                                                   "mkdir '$lpath' failed", $!);
 			     }
 			 }
 			 else {
@@ -2761,6 +2842,7 @@ sub rput {
     my $on_error = delete $opts{on_error};
     local $sftp->{_autodie} if $on_error;
     my $ignore_links = delete $opts{ignore_links};
+    my $mkpath = delete $opts{mkpath};
 
     my $wanted = _gen_wanted( delete $opts{wanted},
 			      delete $opts{no_wanted} );
@@ -2791,6 +2873,7 @@ sub rput {
 
     $copy_perm = 1 unless defined $copy_perm;
     $copy_time = 1 unless defined $copy_time;
+    $mkpath = 1 unless defined $mkpath;
 
     $umask = umask unless defined $umask;
     my $mask = ~$umask;
@@ -2815,22 +2898,26 @@ sub rput {
 			if ($fn =~ $relocal) {
 			    my $rpath = $sftp->join($remote, File::Spec->splitdir($1));
 			    $debug and $debug & 32768 and _debug "rpath: $rpath";
-			    if ($sftp->test_d($rpath)) {
+                            my $a = Net::SFTP::Foreign::Attributes->new;
+                            $a->set_perm(($copy_perm ? $e->{a}->perm & 0777 : 0777) & $mask);
+                            if ($sftp->mkdir($rpath, $a)) {
+                                $count++;
+                                return 1;
+                            }
+                            if ($mkpath and
+                                $sftp->status == SSH2_FX_NO_SUCH_FILE) {
+                                $sftp->_clear_error_and_status;
+                                if ($sftp->mkpath($rpath, $a)) {
+                                    $count++;
+                                    return 1;
+                                }
+                            }
+                            $lfs->_copy_error($sftp);
+                            if ($sftp->test_d($rpath)) {
 				$lfs->_set_error(SFTP_ERR_REMOTE_ALREADY_EXISTS,
 						 "Remote directory '$rpath' already exists");
 				$lfs->_call_on_error($on_error, $e);
 				return 1;
-			    }
-			    else {
-				my $a = Net::SFTP::Foreign::Attributes->new;
-				$a->set_perm(($copy_perm ? $e->{a}->perm & 0777 : 0777) & $mask);
-				if ($sftp->mkdir($rpath, $a)) {
-				    $count++;
-				    return 1;
-				}
-				else {
-				    $lfs->_copy_error($sftp);
-				}
 			    }
 			}
 			else {
@@ -2921,7 +3008,7 @@ sub mget {
 
     my %get_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask perm copy_perm copy_time block_size queue_size
-                       overwrite conversion resume numbered atomic best_effort));
+                       overwrite conversion resume numbered atomic best_effort mkpath));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -2977,7 +3064,7 @@ sub mput {
     my %put_opts = (map { $_ => delete $opts{$_} }
 		    qw(umask perm copy_perm copy_time block_size queue_size
                        overwrite conversion resume numbered late_set_perm
-                       atomic best_effort sparse));
+                       atomic best_effort sparse mkpath));
 
     %opts and _croak_bad_options(keys %opts);
 
@@ -3899,6 +3986,12 @@ If not-overwrite of remote files is also requested, an empty file may
 appear at the target destination before the rename operation is
 performed. This is due to limitations of some operating/file systems.
 
+=item mkpath =E<gt> 0
+
+By default the method creates any non-existent parent directory for
+the given target path. That feature can be dissabled setting this flag
+to 0.
+
 =item cleanup =E<gt> 1
 
 If the transfer fails, remove the incomplete file.
@@ -4052,6 +4145,12 @@ the remote file is newer than the local one.
 
 Blocks that are all zeros are skipped possibly creating an sparse file
 on the remote host.
+
+=item mkpath =E<gt> 0
+
+By default the method creates any non-existent parent directory for
+the given target path. That feature can be dissabled setting this flag
+to 0.
 
 =item atomic =E<gt> 1
 
@@ -4862,22 +4961,30 @@ Shortcuts around C<setstat> method.
 Sends a C<SSH_FXP_REMOVE> command to remove the remote file
 C<$path>. Returns a true value on success and undef on failure.
 
-=item $sftp-E<gt>mkdir($path)
-
 =item $sftp-E<gt>mkdir($path, $attrs)
 
 Sends a C<SSH_FXP_MKDIR> command to create a remote directory C<$path>
 whose attributes are initialized to C<$attrs> (a
-L<Net::SFTP::Foreign::Attributes> object) if given.
+L<Net::SFTP::Foreign::Attributes> object).
 
 Returns a true value on success and undef on failure.
 
-=item $sftp-E<gt>mkpath($path)
+The C<$attrs> argument is optional.
 
-=item $sftp-E<gt>mkpath($path, $attrs)
+=item $sftp-E<gt>mkpath($path, $attrs, $parent)
 
 This method is similar to C<mkdir> but also creates any non-existent
 parent directories recursively.
+
+When the optional argument C<$parent> has a true value, just the
+parent directory of the given path (and its ancestors as required) is
+created.
+
+For instance:
+
+  $sftp->mkpath("/tmp/work", undef, 1);
+  my $fh = $sftp->open("/tmp/work/data.txt",
+                       SSH2_FXF_WRITE|SSH2_FXF_CREAT);
 
 =item $sftp-E<gt>rmdir($path)
 
