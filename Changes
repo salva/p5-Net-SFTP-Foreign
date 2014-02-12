@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.78_01
+        - add support for fsync method via fsync@openssh.com extension
+
 1.77  Nov 5, 2013
         - release as stable
         - fix misspellings in error message

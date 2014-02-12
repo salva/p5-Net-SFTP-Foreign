@@ -3100,6 +3100,29 @@ sub mput {
     $count;
 }
 
+sub fsync {
+    @_ == 2 or croak 'Usage: $sftp->fsync($fh)';
+    ${^TAINT} and &_catch_tainted_args;
+
+    my ($sftp, $fh) = @_;
+
+    $sftp->flush($fh, "out");
+    $sftp->_check_extension('fsync@openssh.com' => 1,
+                            SFTP_ERR_REMOTE_FSYNC_FAILED,
+                            "fsync failed, not implemented")
+        or return undef;
+
+    my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
+                                   str => 'fsync@openssh.com',
+                                   str => $sftp->_rid($fh));
+    if ($sftp->_check_status_ok($id,
+                                SFTP_ERR_REMOTE_FSYNC_FAILED,
+                                "Couldn't fsync remote file")) {
+        return 1;
+    }
+    return undef;
+}
+
 sub statvfs {
     @_ == 2 or croak 'Usage: $sftp->statvfs($path_or_fh)';
     ${^TAINT} and &_catch_tainted_args;
@@ -3111,7 +3134,7 @@ sub statvfs {
 
     $sftp->_check_extension($extension => 2,
                             SFTP_ERR_REMOTE_STATVFS_FAILED,
-                            "statvfs failed")
+                            "statvfs failed, not implemented")
         or return undef;
 
     my $id = $sftp->_queue_new_msg(SSH2_FXP_EXTENDED,
@@ -4866,8 +4889,18 @@ reports whether the remote file handler points at the end of the file.
 
 =item $sftp-E<gt>flush($fh)
 
-X<flush>writes to the remote file any pending data and discards the read
-cache.
+X<flush>writes to the remote file any pending data and discards the
+read cache.
+
+Note that this operation just sends data cached locally to the remote
+server. You may like to call C<fsync> (when supported) afterwards to
+ensure that data is actually flushed to disc.
+
+=item $sftp-E<gt>fsync($fh)
+
+On servers supporting the C<fsync@openssh.com> extension, this method
+calls L<fysnc(2)> on the remote side, which usually flushes buffered
+changes to disk.
 
 =item $sftp-E<gt>sftpread($handle, $offset, $length)
 
