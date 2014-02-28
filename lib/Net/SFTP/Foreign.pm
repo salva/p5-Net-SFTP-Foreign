@@ -3831,18 +3831,18 @@ The acceptable values for C<$ad> are:
 
 =over 4
 
-=item 0
+=item '0'
 
 Never try to disconnect this object when exiting from any process.
 
 On most operating systems, the SSH process will exit when the last
 process connected to it ends, but this is not guaranteed.
 
-=item 1
+=item '1'
 
 Disconnect on exit from any process. This is the default.
 
-=item 2
+=item '2'
 
 Disconnect on exit from the current process only.
 
