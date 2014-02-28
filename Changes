@@ -1,6 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
 1.78_01
+        - require Time::HiRes on Makefile.PL as some distributions
+          don't include it on the base perl distribution
         - fix doc misspelling (reported by Sándor Farkas)
         - add support for fsync method via fsync@openssh.com extension
 
