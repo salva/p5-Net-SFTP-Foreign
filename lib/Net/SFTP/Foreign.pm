@@ -1146,6 +1146,7 @@ sub _mkpath_local {
     }
     while (1) {
         my $target = File::Spec->join(@parts);
+        $target = '' unless defined $target;
         if (-e $target) {
             if (-d $target) {
                 while (@tail) {
