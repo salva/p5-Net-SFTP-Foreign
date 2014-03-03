@@ -5288,7 +5288,7 @@ the remote side.
 As a work around you can just disable the feature:
 
   $sftp->put($local_file, $remote_file,
-             copy_perms => 0, copy_time => 0);
+             copy_perm => 0, copy_time => 0);
 
 =item Disable password authentication completely
 
