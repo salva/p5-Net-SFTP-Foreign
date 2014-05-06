@@ -3619,6 +3619,10 @@ command to complete.
 When the timeout expires, the current method is aborted and
 the SFTP connection becomes invalid.
 
+Note that the given value is used internally to time out low level
+operations. The high level operations available through the API may
+take longer to expire (sometimes up to 4 times longer).
+
 =item fs_encoding =E<gt> $encoding
 
 Version 3 of the SFTP protocol (the one supported by this module)
