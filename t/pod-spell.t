@@ -12,7 +12,8 @@ my @ignore = ("Fandi\xf1o", "API", "CPAN", "GitHub", "bugtracking", "IETF", "Ope
               "de", "facto", "dualvar", "ffs", "zfs", "hardcode", "hardlink", "filename",
               "libssh", "login", "overpassed", "passphrase", "pipelined", "plugable",
               "pre", "realpath", "runtime", "sftp", "stderr", "subdirectories", "tectia",
-              "username", "unix", "versa", "wildcard", "wildcards", "wishlist", "deserialization");
+              "username", "unix", "versa", "wildcard", "wildcards", "wishlist",
+               "deserialization", "resumable", "mkpath", "att", "fxp");
 
 local $ENV{LC_ALL} = 'C';
 add_stopwords(@ignore);
