@@ -1,12 +1,13 @@
 Revision history for Net::SFTP::Foreign
 
-1.78_01
+1.78_01  Jun 14, 2014
         - fix more POD errors
         - fix POD error (reported by Stefan Zwijsen)
         - require Time::HiRes on Makefile.PL as some distributions
           don't include it on the base perl distribution
         - fix doc misspelling (reported by Sándor Farkas)
         - add support for fsync method via fsync@openssh.com extension
+        - add mkpath feature
 
 1.77  Nov 5, 2013
         - release as stable

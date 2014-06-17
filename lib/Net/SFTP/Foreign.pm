@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.77';
+our $VERSION = '1.78_01';
 
 use strict;
 use warnings;
@@ -4017,7 +4017,7 @@ performed. This is due to limitations of some operating/file systems.
 =item mkpath =E<gt> 0
 
 By default the method creates any non-existent parent directory for
-the given target path. That feature can be dissabled setting this flag
+the given target path. That feature can be disabled setting this flag
 to 0.
 
 =item cleanup =E<gt> 1
@@ -4177,7 +4177,7 @@ on the remote host.
 =item mkpath =E<gt> 0
 
 By default the method creates any non-existent parent directory for
-the given target path. That feature can be dissabled setting this flag
+the given target path. That feature can be disabled setting this flag
 to 0.
 
 =item atomic =E<gt> 1
@@ -5454,7 +5454,7 @@ L<autodie>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2013 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2014 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 
