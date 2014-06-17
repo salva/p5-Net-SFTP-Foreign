@@ -5,6 +5,11 @@ use warnings;
 use 5.010;
 use Net::SFTP::Foreign;
 
+# See the following PerlMonks thread:
+#
+# "Net::SFTP::Foreign works intermittently"
+#     http://perlmonks.org/?node_id=1090118
+
 my $n = shift @ARGV // 10;
 my $target = shift @ARGV // 'localhost';
 my $password = shift @ARGV // 'foo';
