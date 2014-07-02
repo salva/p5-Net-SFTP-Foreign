@@ -777,7 +777,7 @@ sub flush {
 
     if ($dir ne 'in') { # flush out!
 	my $bout = $rfh->_bout;
-	my $len = length $$bout;
+	my $len = ($$bout) ? length $$bout : 0;
 	if ($len) {
 	    my $start;
 	    my $append = $rfh->_flag('append');
