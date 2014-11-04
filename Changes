@@ -1,8 +1,7 @@
 Revision history for Net::SFTP::Foreign
 
 1.78_02  Nov 4, 2014
-
-        - improve block size autodetection logic which should improve
+        - redo block size autodetection logic which should improve
           performance greatly in some cases (this is a dangerous
           change that could introduce regressions, report them!)
         - add support for new constructor option min_block_size
