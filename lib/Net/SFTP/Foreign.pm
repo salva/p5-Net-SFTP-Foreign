@@ -214,6 +214,7 @@ sub new {
 
     $sftp->{_autodie} = delete $opts{autodie};
     $sftp->{_block_size} = delete $opts{block_size} || $defs{block_size} || 32*1024;
+    $sftp->{_min_block_size} = delete $opts{min_block_size} || $defs{min_block_size} || 512;
     $sftp->{_queue_size} = delete $opts{queue_size} || $defs{queue_size} || 32;
     $sftp->{_read_ahead} = $defs{read_ahead} || $sftp->{_block_size} * 4;
     $sftp->{_write_delay} = $defs{write_delay} || $sftp->{_block_size} * 8;
@@ -1735,10 +1736,11 @@ sub get {
     my @askoff;
     my $loff = $askoff;
     my $adjustment = 0;
-    my $n = 0;
     local $\;
 
     my $slow_start = ($size == -1 ? $queue_size - 1 : 0);
+
+    my $safe_block_size = $sftp->{_min_block_size} >= $block_size;
 
     do {
         # Disable autodie here in order to do not leave unhandled
@@ -1750,15 +1752,14 @@ sub get {
 
         while (1) {
             # request a new block if queue is not full
-            while (!@msgid or ( ($size == -1 or $size > $askoff)   and
+            while (!@msgid or ( ($size == -1 or $size + $block_size > $askoff)   and
                                 @msgid < $queue_size - $slow_start and
-                                $n != 1 ) ) {
+                                $safe_block_size ) ) {
                 my $id = $sftp->_queue_new_msg(SSH2_FXP_READ, str=> $rfid,
                                                int64 => $askoff, int32 => $block_size);
                 push @msgid, $id;
                 push @askoff, $askoff;
                 $askoff += $block_size;
-                $n++;
             }
 
             $slow_start-- if $slow_start;
@@ -1771,10 +1772,7 @@ sub get {
                                                 "Couldn't read from remote file");
 
             unless ($msg) {
-                if ($sftp->{_status} == SSH2_FX_EOF) {
-                    $sftp->_set_error;
-                    $roff != $loff and next;
-                }
+                $sftp->_set_error if $sftp->{_status} == SSH2_FX_EOF;
                 last;
             }
 
@@ -1788,9 +1786,16 @@ sub get {
             }
 
             $loff += $len;
-            if ($len < $block_size) {
-                $block_size = $len < 2048 ? 2048 : $len;
-                $askoff = $loff;
+            unless ($safe_block_size) {
+                if ($len > $sftp->{_min_block_size}) {
+                    $sftp->{min_block_size} = $len;
+                    if ($len < $block_size) {
+                        # auto-adjust block size
+                        $block_size = $len;
+                        $askoff = $loff;
+                    }
+                }
+                $safe_block_size = 1;
             }
 
             my $adjustment_before = $adjustment;
