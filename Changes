@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.78_02  Nov 4, 2014
+        - add support for check option into setcwd method (feature
+          request by T. Linden)
+
 1.78_01  Jun 14, 2014
         - fix more POD errors
         - fix POD error (reported by Stefan Zwijsen)
