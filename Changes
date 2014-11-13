@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.78_03
+        - document HP-UX password bug
+
 1.78_02  Nov 4, 2014
         - redo block size autodetection logic which should improve
           performance greatly in some cases (this is a dangerous

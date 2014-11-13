@@ -5427,6 +5427,20 @@ and 2 respectively) that will cause the connection to fail.
 
 Specifically this is known to happen under mod_perl/mod_perl2.
 
+=item - Password authentication on HP-UX
+
+For some unknown reason, it seems that when using the module on HP-UX,
+number signs (C<#>) in password need to be escaped (C<\#>). For
+instance:
+
+  my $password = "foo#2014";
+  $password =~ s/#/\\#/g if $running_in_hp_ux;
+  my $ssh = Net::OpenSSH->new($host, user => $user,
+                              password => $password);
+
+I don't have access to an HP-UX machine, and so far nobody using it
+has been able to explain this behaviour. Patches welcome!
+
 =back
 
 Also, the following features should be considered experimental:
