@@ -1,6 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
 1.78_03
+        - rput handling of copy_perm was broken (bug report by Karsten
+          Wagner Bang)
+        - add support for perm option in rput method
         - document HP-UX password bug
 
 1.78_02  Nov 4, 2014
@@ -22,7 +25,7 @@ Revision history for Net::SFTP::Foreign
 
 1.77  Nov 5, 2013
         - release as stable
-        - fix misspellings in error message
+        - fix misspellings in error messages
 
 1.76_04  Oct 2, 2013
         - fix 'Use of "goto" to jump into a construct is deprecated'

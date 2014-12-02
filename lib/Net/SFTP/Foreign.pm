@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.78_02';
+our $VERSION = '1.78_03';
 
 use strict;
 use warnings;
@@ -2848,6 +2848,7 @@ sub rput {
 
     # my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
+    my $perm = delete $opts{perm};
     my $copy_perm = delete $opts{exists $opts{copy_perm} ? 'copy_perm' : 'copy_perms'};
     my $copy_time = delete $opts{copy_time};
 
@@ -2869,6 +2870,11 @@ sub rput {
     my %put_symlink_opts = (map { $_ => $put_opts{$_} }
                             qw(overwrite numbered));
 
+    croak "'perm' and 'umask' options can not be used simultaneously"
+        if (defined $perm and defined $umask);
+    croak "'perm' and 'copy_perm' options can not be used simultaneously"
+        if (defined $perm and $copy_perm);
+
     %opts and _croak_bad_options(keys %opts);
 
     require Net::SFTP::Foreign::Local;
@@ -2888,8 +2894,14 @@ sub rput {
     $copy_time = 1 unless defined $copy_time;
     $mkpath = 1 unless defined $mkpath;
 
-    $umask = umask unless defined $umask;
-    my $mask = ~$umask;
+    my $mask;
+    if (defined $perm) {
+        $mask = $perm & 0777;
+    }
+    else {
+        $umask = umask unless defined $umask;
+        $mask = 0777 & ~$umask;
+    }
 
     if ($on_error) {
 	my $on_error1 = $on_error;
@@ -2912,7 +2924,12 @@ sub rput {
 			    my $rpath = $sftp->join($remote, File::Spec->splitdir($1));
 			    $debug and $debug & 32768 and _debug "rpath: $rpath";
                             my $a = Net::SFTP::Foreign::Attributes->new;
-                            $a->set_perm(($copy_perm ? $e->{a}->perm & 0777 : 0777) & $mask);
+                            if (defined $perm) {
+                                $a->set_perm($mask | 0300);
+                            }
+                            elsif ($copy_perm) {
+                                $a->set_perm($e->{a}->perm & $mask);
+                            }
                             if ($sftp->mkdir($rpath, $a)) {
                                 $count++;
                                 return 1;
@@ -2969,9 +2986,9 @@ sub rput {
 				    }
 				    else {
 					if ($sftp->put($fn, $rpath,
-                                                       ($copy_perm
-                                                        ? (perm  => $e->{a}->perm & 0777 & $mask)
-                                                        : (umask => $umask) ),
+                                                       ( defined($perm) ? (perm => $perm)
+                                                         : $copy_perm   ? (perm => $e->{a}->perm & $mask)
+                                                         : (copy_perm => 0, umask => $umask) ),
 						       copy_time => $copy_time,
                                                        %put_opts)) {
 					    $count++;
@@ -4686,6 +4703,14 @@ to the remote server (after applying the umask). On by default.
 if set to a true value, file atime and mtime are copied to the
 remote server. On by default.
 
+=item perm =E<gt> $perm
+
+Sets the permission of the copied files to $perm. For directories the
+value C<$perm|0300> is used.
+
+Note that when this option is used, umask and local permissions are
+ignored.
+
 =item overwrite =E<gt> $bool
 
 if set to a true value, when a remote file with the same name already
@@ -4693,8 +4718,8 @@ exists it is overwritten. On by default.
 
 =item newer_only =E<gt> $bool
 
-if set to a true value, when a remote file with the same name already exists it is
-overwritten only if the local file is newer.
+if set to a true value, when a remote file with the same name already
+exists it is overwritten only if the local file is newer.
 
 =item ignore_links =E<gt> $bool
 
