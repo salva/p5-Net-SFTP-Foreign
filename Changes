@@ -1,6 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
-1.78_03
+1.78_04
+        - flush and close methods now check that the file handle is
+          still open (bug reported by David Jack Wange Olrik,
+          github/#5)
+
+1.78_03  Dec 2, 2014
         - rput handling of copy_perm was broken (bug report by Karsten
           Wagner Bang)
         - add support for perm option in rput method

@@ -779,6 +779,8 @@ sub flush {
     my ($sftp, $rfh, $dir) = @_;
     $dir ||= '';
 
+    defined $sftp->_rfid($rfh) or return;
+
     if ($dir ne 'out') { # flush in!
 	${$rfh->_bin} = '';
     }
@@ -1262,9 +1264,11 @@ sub _close {
 
 sub close {
     @_ == 2 or croak 'Usage: $sftp->close($fh)';
+    ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $rfh) = @_;
-    $rfh->_check_is_file;
+    # defined $sftp->_rfid($rfh) or return undef;
+    # ^--- commented out because flush already checks it is an open file
     $sftp->flush($rfh)
 	or return undef;
 
