@@ -5177,6 +5177,15 @@ The values of the f_flag bit mask are as follows:
   SSH2_FXE_STATVFS_ST_RDONLY => read-only
   SSH2_FXE_STATVFS_ST_NOSUID => no setuid
 
+=item $sftp->test_d($path)
+
+Checks whether the given path corresponds to a directory.
+
+=item $sftp->test_e($path)
+
+Checks wheter a file system object (file, directory, etc.) exists at
+the given path.
+
 =item $sftp-E<gt>disconnect
 
 Closes the SSH connection to the remote host. From this point the
