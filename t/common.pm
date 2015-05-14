@@ -3,12 +3,16 @@ use warnings;
 
 use File::Spec;
 use Test::More;
+use Fcntl ();
 
 select STDERR;
 $|=1;
 select STDOUT;
 
 $ENV{PATH} = '/usr/bin:/bin' if ${^TAINT};
+
+# tests don't work in parallel
+flock DATA, Fcntl::LOCK_EX();
 
 sub is_windows { $^O =~ /MSWin32/i }
 
@@ -127,3 +131,5 @@ sub new_args {
 }
 
 1;
+
+__DATA__

@@ -1,6 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
-1.78_04
+1.78_04  May 14, 2015
+        - document test_d and test_e methods
+        - avoid running tests in parallel (fixes #RT101936 reported by
+          Karen Etheridge)
         - flush and close methods now check that the file handle is
           still open (bug reported by David Jack Wange Olrik,
           github/#5)

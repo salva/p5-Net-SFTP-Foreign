@@ -5183,7 +5183,7 @@ Checks whether the given path corresponds to a directory.
 
 =item $sftp->test_e($path)
 
-Checks wheter a file system object (file, directory, etc.) exists at
+Checks whether a file system object (file, directory, etc.) exists at
 the given path.
 
 =item $sftp-E<gt>disconnect
