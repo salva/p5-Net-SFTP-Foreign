@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.78_05  Aug 17, 2015
+        - make autodisconnect on current pid/thread the default
+         *** WARNING: this is a backward incompatible change!!!
+        - check also the thread generation match before
+          autodisconnecting (bug report by Harry Zhu)
+
 1.78_04  May 14, 2015
         - document test_d and test_e methods
         - avoid running tests in parallel (fixes #RT101936 reported by

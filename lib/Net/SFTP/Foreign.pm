@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.78_04';
+our $VERSION = '1.78_05';
 
 use strict;
 use warnings;
@@ -55,6 +55,9 @@ BEGIN {
 	$dirty_cleanup = 1 unless defined $dirty_cleanup;
     }
 }
+
+my $thread_generation = 1;
+sub CLONE { $thread_generation++ }
 
 sub _deprecated {
     if (warnings::enabled('deprecated') and warnings::enabled(__PACKAGE__)) {
@@ -246,12 +249,18 @@ sub new {
 
 sub autodisconnect {
     my ($sftp, $ad) = @_;
-    if (defined $ad and $ad != 1) {
+    if (not defined $ad or $ad == 2) {
+        $debug and $debug & 4 and _debug "setting disconnecting pid to $$ and thread to $thread_generation";
+        $sftp->{_disconnect_by_pid} = $$;
+        $sftp->{_disconnect_by_thread} = $thread_generation;
+    }
+    else {
+        delete $sftp->{_disconnect_by_thread};
         if ($ad == 0) {
             $sftp->{_disconnect_by_pid} = -1;
         }
-        elsif ($ad == 2) {
-            $sftp->{_disconnect_by_pid} = $$;
+        elsif ($ad == 1) {
+            delete $sftp->{_disconnect_by_pid};
         }
         else {
             croak "bad value '$ad' for autodisconnect";
@@ -326,10 +335,19 @@ sub DESTROY {
 
     my $sftp = shift;
     my $dbpid = $sftp->{_disconnect_by_pid};
+    my $dbthread = $sftp->{_disconnect_by_thread};
 
-    $debug and $debug & 4 and _debug("$sftp->DESTROY called (current pid: $$, disconnect_by_pid: ".($dbpid||'').")");
+    $debug and $debug & 4 and _debug("$sftp->DESTROY called (current pid: $$, disconnect_by_pid: " .
+                                     ($dbpid || '') .
+                                     "), current thread generation: $thread_generation, disconnect_by_thread: " .
+                                     ($dbthread || '') . ")");
 
-    $sftp->disconnect if (!defined $dbpid or $dbpid == $$);
+    if (!defined $dbpid or ($dbpid == $$ and $dbthread == $thread_generation)) {
+        $sftp->disconnect
+    }
+    else {
+        $debug and $debug & 4 and _debug "skipping disconnection because pid and/or thread generation don't match";
+    }
 }
 
 sub _init {
@@ -3858,11 +3876,8 @@ read access pattern.
 =item autodisconnect =E<gt> $ad
 
 by default, the SSH connection is closed from the DESTROY method when
-the object goes out of scope. But on scripts that fork new processes,
-that results on the SSH connection being closed by the first process
-where the object goes out of scope, something undesirable.
-
-This option allows one to work-around this issue to some extend.
+the object goes out of scope on the process and thread where it was
+created. This option allows one to customize this behaviour.
 
 The acceptable values for C<$ad> are:
 
@@ -3875,13 +3890,17 @@ Never try to disconnect this object when exiting from any process.
 On most operating systems, the SSH process will exit when the last
 process connected to it ends, but this is not guaranteed.
 
+You can always call the C<disconnect> method explicitly to end the
+connection at the right time from the right place.
+
 =item '1'
 
-Disconnect on exit from any process. This is the default.
+Disconnect on exit from any thread or process.
 
 =item '2'
 
-Disconnect on exit from the current process only.
+Disconnect on exit from the current process/thread only. This is the
+default.
 
 =back
 
