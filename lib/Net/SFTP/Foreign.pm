@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.78_05';
+our $VERSION = '1.78_06';
 
 use strict;
 use warnings;
@@ -2106,7 +2106,7 @@ sub put {
             $sftp->stat($remote);
         };
 	if ($rattrs) {
-	    if ($resume and $resume eq 'auto' and $rattrs->mtime >= $lmtime) {
+	    if ($resume and $resume eq 'auto' and $rattrs->mtime <= $lmtime) {
                 $debug and $debug & 16384 and
                     _debug "not resuming because local file is newer, r: ".$rattrs->mtime." l: $lmtime";
 		undef $resume;
