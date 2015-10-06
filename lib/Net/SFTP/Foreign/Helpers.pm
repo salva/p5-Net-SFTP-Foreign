@@ -28,7 +28,8 @@ our @EXPORT_OK = qw( _is_lnk
 		     _glob_to_regex
                      _file_part
                      _umask_save_and_set
-                     _tcroak );
+                     _tcroak
+                     _untaint );
 
 our $debug;
 
@@ -306,6 +307,15 @@ sub _file_part {
     my $path = shift;
     $path =~ m{([^/]*)$} or croak "unable to get file part from path '$path'";
     $1;
+}
+
+sub _untaint {
+    if (${^TAINT}) {
+        for (@_) {
+            defined or next;
+            ($_) = /(.*)/s
+        }
+    }
 }
 
 sub _umask_save_and_set {

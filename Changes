@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.78_07  Oct 6, 2015
+        - setcwd was broken in taint mode (bug report by E. Choroba)
+
 1.78_06  Oct 1, 2015
         - the auto resume feature in put method was broken (bug report
           and fix by Denis Shirokov)

@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.78_06';
+our $VERSION = '1.78_07';
 
 use strict;
 use warnings;
@@ -36,7 +36,8 @@ use Net::SFTP::Foreign::Helpers qw(_is_reg _is_lnk _is_dir _debug
                                    _sort_entries _gen_wanted
                                    _gen_converter _hexdump
                                    _ensure_list _catch_tainted_args
-                                   _file_part _umask_save_and_set);
+                                   _file_part _umask_save_and_set
+                                   _untaint);
 use Net::SFTP::Foreign::Constants qw( :fxp :flags :att
 				      :status :error
 				      SSH2_FILEXFER_VERSION );
@@ -535,6 +536,7 @@ sub setcwd {
         if ($check) {
             $cwd = $sftp->realpath($cwd);
             return undef unless defined $cwd;
+            _untaint($cwd);
             my $a = $sftp->stat($cwd)
                 or return undef;
             unless (_is_dir($a->perm)) {
@@ -1027,7 +1029,7 @@ sub stat {
 }
 
 sub fstat {
-    _deprecated "fstat is deprecated and will be removed on the upcomming 2.xx series, "
+    _deprecated "fstat is deprecated and will be removed on the upcoming 2.xx series, "
         . "stat method accepts now both file handlers and paths";
     goto &stat;
 }
@@ -1224,7 +1226,7 @@ sub setstat {
 # these return true on success, undef on failure
 
 sub fsetstat {
-    _deprecated "fsetstat is deprecated and will be removed on the upcomming 2.xx series, "
+    _deprecated "fsetstat is deprecated and will be removed on the upcoming 2.xx series, "
         . "setstat method accepts now both file handlers and paths";
     goto &setstat;
 }
@@ -3205,7 +3207,7 @@ sub statvfs {
 }
 
 sub fstatvfs {
-    _deprecated "fstatvfs is deprecated and will be removed on the upcomming 2.xx series, "
+    _deprecated "fstatvfs is deprecated and will be removed on the upcoming 2.xx series, "
         . "statvfs method accepts now both file handlers and paths";
     goto &statvfs;
 }
@@ -5497,6 +5499,23 @@ instance:
 
 I don't have access to an HP-UX machine, and so far nobody using it
 has been able to explain this behaviour. Patches welcome!
+
+=item - Taint mode and data coming through SFTP
+
+When the module finds it is being used from a script started in taint
+mode, on every method call it checks all the arguments passed and dies
+if any of them is tainted. Also, any data coming through the SFTP
+connection is marked as tainted.
+
+That generates an internal conflict for those methods that under the
+hood query the remote server multiple times, using data from responses
+to previous queries (tainted) to build new ones (die!).
+
+I don't think a generic solution could be applied to this issue while
+honoring the taint-mode spirit (and erring on the safe side), so my
+plan is to fix that in a case by case manner.
+
+So, please report any issue you find with taint mode!
 
 =back
 
