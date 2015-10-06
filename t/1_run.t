@@ -173,6 +173,7 @@ for my $setcwd (0, 1) {
     # reconnect
     $sftp = eval { Net::SFTP::Foreign->new(@new_args) };
     diag($@) if $@;
+    dump_error($sftp);
 
     ok (defined $sftp, "creating object 2");
 
@@ -182,6 +183,7 @@ for my $setcwd (0, 1) {
     }
 
     my $fh = $sftp->open($drfn, SSH2_FXF_CREAT|SSH2_FXF_WRITE);
+    dump_error($sftp);
     ok ($fh, "open write file");
 
     print $fh $_ for @data;
@@ -193,6 +195,7 @@ for my $setcwd (0, 1) {
     my @all = (@data) x 10;
 
     $fh = $sftp->open($drfn);
+    dump_error($sftp);
     ok($fh, "open read file");
 
     my @read = <$fh>;
@@ -203,6 +206,7 @@ for my $setcwd (0, 1) {
     ok(close($fh), "close file");
 
     $fh = $sftp->open($drfn);
+    dump_error($sftp);
     ok($fh, "open read file 2");
 
     @read = ();
@@ -213,6 +217,7 @@ for my $setcwd (0, 1) {
     ok(close($fh), "close file");
 
     $fh = $sftp->open($drfn, SSH2_FXF_CREAT|SSH2_FXF_WRITE);
+    dump_error($sftp);
     ok ($fh, "open write file");
 
     my $all = join('', ((@all) x 10));
@@ -229,6 +234,7 @@ for my $setcwd (0, 1) {
     $sftp->put_content($cp, $drfn);
 
     $fh = $sftp->open($drfn);
+    dump_error($sftp);
     ok($fh, "open read file 3");
 
     ok(!$sftp->eof($fh), "not at eof");

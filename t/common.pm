@@ -130,6 +130,15 @@ sub new_args {
     @args;
 }
 
+sub dump_error {
+    my $sftp = shift;
+    if (my $error = $sftp->error) {
+        my $status = $sftp->status || 0;
+        diag sprintf("SFTP error: %s [%d], status: %s [%d]",
+                     $error, $error, $status, $status);
+    }
+}
+
 1;
 
 __DATA__
