@@ -3572,10 +3572,8 @@ L<Net::SFTP::Foreign::Backend::Net_SSH2>.
 
 =head2 Error handling
 
-Most of the methods available from this package return undef on
-failure and a true value or the requested data on
-success. C<$sftp-E<gt>error> should be used to check for errors
-explicitly after every method call. For instance:
+The method C<$sftp-E<gt>error> can be used to check for errors
+after every method call. For instance:
 
   $sftp = Net::SFTP::Foreign->new($host);
   $sftp->error and die "unable to connect to remote host: " . $sftp->error;
@@ -3585,15 +3583,51 @@ Also, the L</die_on_error> method provides a handy shortcut for the last line:
   $sftp = Net::SFTP::Foreign->new($host);
   $sftp->die_on_error("unable to connect to remote host");
 
-Alternatively, the C<autodie> mode that makes the module die when any
-error is found can be activated from the constructor. For instance:
+The C<status> method can also be used to get the value for the last
+SFTP status response, but that is only useful when calling low level
+methods mapping to single SFTP primitives. In any case, it should be
+considered an implementation detail of the module usable only for
+troubleshooting and error reporting.
+
+=head2 autodie mode
+
+When the C<autodie> mode is set at construction time, non-recoverable
+errors are automatically promoted to exceptions. For instance:
 
   $sftp = Net::SFTP::Foreign->new($host, autodie => 1);
   my $ls = $sftp->ls("/bar");
   # dies as: "Couldn't open remote dir '/bar': No such file"
 
-The C<autodie> mode will be disabled when an C<on_error> handler is
-passed to methods accepting it:
+=head3 Error handling in non-recursive methods
+
+Most of the non-recursive methods available from this package return
+undef on failure and a true value or the requested data on success.
+
+For instance:
+
+  $sftp->get($from, $to) or die "get failed!";
+
+=head3 Error handling in recursive methods
+
+Recursive methods (i.e. C<find>, C<rget>, C<rput>, C<rremove>) do not
+stop on errors but just skip the affected files and directories and
+keep going.
+
+After a call to a recursive method, the error indicator is only set
+when an unrecoverable error is found (i.e. a connection lost). For
+instance, this code doesn't work as expected:
+
+  $sftp->rremove($dir);
+  $sftp->error and die "rremove failed"; # this is wrong!!!
+
+This does:
+
+  my $errors;
+  $sftp->rremove($dir, on_error => sub { $errors++});
+  $errors and die "rremove failed";
+
+The C<autodie> mode is disabled when an C<on_error> handler is passed
+to methods accepting it:
 
   my $sftp = Net::SFTP::Foreign->new($host, autodie => 1);
   # prints "foo!" and does not die:
@@ -4800,8 +4834,9 @@ The options accepted are:
 =item on_error =E<gt> sub { ... }
 
 This callback is called when some error is occurs. The arguments
-passed are the C<$sftp> object and the current entry (see C<ls> docs
-for more information).
+passed are the C<$sftp> object and the current entry (a hash
+containing the file object details, see C<ls> docs for more
+information).
 
 =item wanted =E<gt> ...
 
