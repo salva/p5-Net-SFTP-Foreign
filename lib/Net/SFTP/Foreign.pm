@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.79';
+our $VERSION = '1.80_01';
 
 use strict;
 use warnings;
@@ -1718,7 +1718,7 @@ sub get {
                 unlink $local if $overwrite;
                 my $open_perm = (defined $perm ? $perm : 0666);
                 my $save = _umask_save_and_set($umask);
-                $sftp->_mkpath_local($local, $perm|0700, 1) if $mkpath;
+                $sftp->_mkpath_local($local, $open_perm|0700, 1) if $mkpath;
                 while (1) {
                     sysopen ($fh, $local, $flags, $open_perm) and last;
                     unless ($numbered and -e $local) {
