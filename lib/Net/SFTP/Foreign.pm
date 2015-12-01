@@ -5153,6 +5153,10 @@ containing C<'..'> into absolute paths.
 
 Returns the absolute path on success, C<undef> on failure.
 
+When the given path points to an unexistent location, what one
+gets back is server dependent. Some servers return a failure message
+and others a canonical version of the path.
+
 =item $sftp-E<gt>rename($old, $new, %opts)
 
 Sends a C<SSH_FXP_RENAME> command to rename C<$old> to C<$new>.
