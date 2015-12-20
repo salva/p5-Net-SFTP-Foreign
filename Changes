@@ -1,7 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.81  Dec 20, 2015
+        - rerelease as stable
+
 1.80_01  Nov 10, 2015
-        - get mkpath was using the wrong permissions and generating a
+        - mkpath was using the wrong permissions and generating a
           warning (bug and solution by Boris Hartwig, #rt108658)
 
 1.79  Oct 10, 2015
