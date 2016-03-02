@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.81';
+our $VERSION = '1.82_01';
 
 use strict;
 use warnings;
@@ -1730,7 +1730,7 @@ sub get {
                 }
                 $$numbered = $local if ref $numbered;
 		binmode $fh;
-		$lstart = sysseek($fh, 0, 1) if $append;
+		$lstart = sysseek($fh, 0, 2) if $append;
 	    }
 	}
 

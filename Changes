@@ -1,5 +1,8 @@
 Revision history for Net::SFTP::Foreign
 
+1.82_01
+        - append feature on get was depending on unspecified behavior
+
 1.81  Dec 20, 2015
         - rerelease as stable
 
