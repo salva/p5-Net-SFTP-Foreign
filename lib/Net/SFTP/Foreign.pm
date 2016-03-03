@@ -1599,7 +1599,7 @@ sub get {
         undef $resume;
     }
 
-    $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered);
+    $overwrite = 1 unless (defined $overwrite or $local_is_fh or $numbered or $append);
     $copy_perm = 1 unless (defined $perm or defined $copy_perm or $local_is_fh);
     $copy_time = 1 unless (defined $copy_time or $local_is_fh);
     $mkpath    = 1 unless defined $mkpath;
