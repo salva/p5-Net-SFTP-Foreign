@@ -1585,12 +1585,12 @@ sub get {
     croak "'atomic' can not be used with 'resume' or 'append'"
         if ($atomic and ($resume or $append));
     if ($local_is_fh) {
-	my $append = 'option can not be used when target is a file handle';
-	$resume and croak "'resume' $append";
-	$overwrite and croak "'overwrite' $append";
-	$numbered and croak "'numbered' $append";
-	$dont_save and croak "'dont_save' $append";
-        $atomic and croak "'croak' $append";
+	my $tail = 'option can not be used when target is a file handle';
+	$resume and croak "'resume' $tail";
+	$overwrite and croak "'overwrite' $tail";
+	$numbered and croak "'numbered' $tail";
+	$dont_save and croak "'dont_save' $tail";
+        $atomic and croak "'croak' $tail";
     }
     %opts and _croak_bad_options(keys %opts);
 
