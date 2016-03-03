@@ -1578,12 +1578,14 @@ sub get {
 
     croak "'perm' and 'copy_perm' options can not be used simultaneously"
 	if (defined $perm and defined $copy_perm);
-    croak "'resume' and 'append' options can not be used simultaneously"
-	if ($resume and $append);
     croak "'numbered' can not be used with 'overwrite', 'resume' or 'append'"
 	if ($numbered and ($overwrite or $resume or $append));
-    croak "'atomic' can not be used with 'resume' or 'append'"
-        if ($atomic and ($resume or $append));
+    if ($resume or $append) {
+        $resume and $append and croak "'resume' and 'append' options can not be used simultaneously";
+        $atomic and croak "'atomic' can not be used with 'resume' or 'append'";
+        $overwrite and croak "'overwrite' can not be used with 'resume' or 'append'";
+    }
+
     if ($local_is_fh) {
 	my $tail = 'option can not be used when target is a file handle';
 	$resume and croak "'resume' $tail";
