@@ -58,10 +58,15 @@ sub sftp_server {
 
 	for ( File::Spec->catfile($vol, $dir, $ssname),
 	      File::Spec->catfile($up, 'lib', $ssname),
+              File::Spec->catfile($up, 'lib64', $ssname),
 	      File::Spec->catfile($up, 'libexec', $ssname),
 	      File::Spec->catfile($up, 'sbin', $ssname),
 	      File::Spec->catfile($up, 'lib', 'openssh', $ssname),
+              File::Spec->catfile($up, 'lib64', 'openssh', $ssname),
+              File::Spec->catfile($up, 'lib', 'misc', $ssname),
+              File::Spec->catfile($up, 'lib64', 'misc', $ssname),
 	      File::Spec->catfile($up, 'usr', 'lib', $ssname),
+              File::Spec->catfile($up, 'usr', 'lib64', $ssname),
 	      File::Spec->catfile($up, 'usr', 'libexec', $ssname),
 	      File::Spec->catfile($up, 'usr', 'sbin', $ssname) ) {
 
