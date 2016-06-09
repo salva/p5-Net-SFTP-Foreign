@@ -12,6 +12,8 @@ use Symbol ();
 use Errno ();
 use Fcntl;
 use File::Spec ();
+use Time::HiRes ();
+use POSIX ();
 
 BEGIN {
     if ($] >= 5.008) {
@@ -289,28 +291,24 @@ sub disconnect {
         }
         else {
 	    my $dirty = ( defined $sftp->{_dirty_cleanup}
-			  ? $sftp->{_dirty_cleanup}
-			  : $dirty_cleanup );
+                          ? $sftp->{_dirty_cleanup}
+                          : $dirty_cleanup );
 
 	    if ($dirty or not defined $dirty) {
                 $debug and $debug & 4 and _debug("starting dirty cleanup of process $pid");
-		for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
+            OUT: for my $sig (($dirty ? () : 0), qw(TERM TERM KILL KILL)) {
                     $debug and $debug & 4 and _debug("killing process $pid with signal $sig");
 		    $sig and kill $sig, $pid;
 
                     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-                    my $wpr;
-                    eval {
-                        local $SIG{ALRM} = sub { die "timeout\n" };
-                        alarm 8;
-                        $wpr = waitpid($pid, 0);
-                        alarm 0;
-                    };
-                    $debug and $debug & 4 and _debug("waitpid returned " . (defined $wpr ? $wpr : '<undef>'));
-                    if ($wpr) {
-                        # $wpr > 0 ==> the process has ben reaped
-                        # $wpr < 0 ==> some error happened, retry unless ECHILD
-                        last if $wpr > 0 or $! == Errno::ECHILD();
+                    my $deadline = Time::HiRes::time + 8;
+                    my $dt = 0.01;
+                    while (Time::HiRes::time < $deadline) {
+                        my $wpr = waitpid($pid, POSIX::WNOHANG());
+                        $debug and $debug & 4 and _debug("waitpid returned ", $wpr);
+                        last OUT if $wpr or $! == Errno::ECHILD();
+                        Time::HiRes::sleep($dt);
+                        $dt *= 1.2;
                     }
 		}
 	    }
@@ -3712,6 +3710,12 @@ the SFTP connection becomes invalid.
 Note that the given value is used internally to time out low level
 operations. The high level operations available through the API may
 take longer to expire (sometimes up to 4 times longer).
+
+The C<Windows> backend used by default when the operating system is MS
+Windows (though, not under Cygwin perl), does not support timeouts. To
+overcome this limitation you can switch to the C<Net_SSH2> backend or
+use L<Net::SSH::Any> that provides its own backend supporting
+timeouts.
 
 =item fs_encoding =E<gt> $encoding
 
