@@ -34,3 +34,4 @@ t/data.txd
 t/data.txu
 t/Net-SFTP-Foreign-Compat.t
 TODO
+rfc/draft-ietf-secsh-scp-sftp-ssh-uri-04.txt
