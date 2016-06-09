@@ -3803,8 +3803,8 @@ For instance:
   $sftp = Net::SFTP::Foreign->new($host, ssh_cmd => 'plink');
 
 When an array reference is used, its elements are inserted at the
-beginning of the system call. That allows, for instance, to connect to
-the target host through some SSH proxy:
+beginning of the system call. That allows one, for instance, to
+connect to the target host through some SSH proxy:
 
   $sftp = Net::SFTP::Foreign->new($host,
               ssh_cmd => qw(ssh -l user proxy.server ssh));
@@ -4023,8 +4023,8 @@ server to ensure that it actually exists and that it is a
 directory. Some servers may fail to honor those requests even for
 valid directories (i.e. when the directory has the hidden flag set).
 
-This option allows to disable those checks and just sets the cwd to
-the given value blindly.
+This option allows one to disable those checks and just sets the cwd
+to the given value blindly.
 
 =back
 
@@ -4572,7 +4572,7 @@ amounts of RAM for big file trees):
 
 =item no_descend =E<gt> sub { ... }
 
-These options, similar to the C<wanted> ones, allow to prune the
+These options, similar to the C<wanted> ones, allow one to prune the
 search, discarding full subdirectories. For instance:
 
     use Fcntl ':mode';
@@ -4845,7 +4845,7 @@ information).
 
 =item no_wanted =E<gt> ...
 
-Allow to select which file system objects have to be deleted.
+Allows one to select which file system objects have to be deleted.
 
 =back
 
@@ -5272,9 +5272,9 @@ argument. The values accepted here are the same as there.
 
 =head2 On the fly data conversion
 
-Some of the methods on this module allow to perform on the fly data
-conversion via the C<conversion> option that accepts the following
-values:
+Some of the methods on this module allow one to perform on the fly
+data conversion via the C<conversion> option that accepts the
+following values:
 
 =over 4
 
