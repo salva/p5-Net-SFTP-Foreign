@@ -14,4 +14,8 @@ my $dir = getcwd;
 my $ftp = Net::SFTP::Foreign->new('localhost', autodie => 1);
 $ftp->setcwd($dir);
 $ftp->get($file, "${file}_copy");
+
+$dir = join '/', '/tmp', map $_.int(rand 100), qw(foo bar doz);
+print STDERR "dir: $dir\n";
+$ftp->get($file, "$dir/$file");
 $ftp->disconnect();

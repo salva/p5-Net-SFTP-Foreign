@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.84_01';
+our $VERSION = '1.85';
 
 use strict;
 use warnings;
@@ -1190,10 +1190,9 @@ sub _mkpath_local {
         }
         unshift @tail, pop @parts;
     }
-
     while (@tail) {
         push @parts, shift @tail;
-        my $target = File::Spec->catpath(@parts);
+        my $target = File::Spec->catdir(@parts);
         $debug and $debug and 32768 and _debug "creating local directory '$target'";
         unless (CORE::mkdir $target, $perm) {
             unless (do { local $!; -d $target}) {

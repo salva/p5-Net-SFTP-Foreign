@@ -82,11 +82,14 @@ sub sftp_server {
 
 sub filediff {
     my ($a, $b) = @_;
-    open my $fa, "<", $a
-	or die "unable to open file $a";
-
-    open my $fb, "<", $b
-	or die "unable to open file $b";
+    open my $fa, "<", $a or do {
+        diag "unable to open file $a";
+        return;
+    };
+    open my $fb, "<", $b or do {
+        diag "unable to open file $b";
+        return;
+    };
 
     binmode $fa;
     binmode $fb;

@@ -19,7 +19,7 @@ plan skip_all => "tests not supported on inferior OS"
 
 my @new_args = new_args;
 
-plan tests => 811;
+plan tests => 939;
 
 use_ok('Net::SFTP::Foreign');
 use Net::SFTP::Foreign::Constants qw(:flags SFTP_ERR_CONNECTION_BROKEN);
@@ -116,6 +116,20 @@ for my $setcwd (0, 1) {
         diag ($sftp->error) if $sftp->error;
         ok(!filediff($drfn_l, $dlfn1), "get - file content - $i");
         unlink $dlfn1;
+
+        my $dir = sprintf "data%03d", int(rand 1000);
+        my $dlfn2 = File::Spec->catfile($lcwd, $dir, 'data.l');
+        ok ($sftp->get($drfn, $dlfn2), "get - mkpath local - $i");
+        diag ($sftp->error) if $sftp->error;
+        ok(!filediff($drfn_l, $dlfn2), "get - mkpath local - file content - $i");
+        ok(unlink($dlfn2), "remove file");
+        ok(rmdir(File::Spec->catfile($lcwd, $dir)), "remove dir");
+
+        ok ($sftp->get($drfn, File::Spec->rel2abs($dlfn2)), "get - mkpath local - abs - $i");
+        diag ($sftp->error) if $sftp->error;
+        ok(!filediff($drfn_l, $dlfn2), "get - mkpath local - abs - file content - $i");
+        ok(unlink($dlfn2), "remove file");
+        ok(rmdir(File::Spec->catfile($lcwd, $dir)), "remove dir");
 
         my $c = 0;
         ok ($sftp->get($drfn, $dlfn1, conversion => sub { $c = 1 } ), "get with conversion - $i");

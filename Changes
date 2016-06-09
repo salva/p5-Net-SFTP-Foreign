@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.85  Jun 9, 2016
+        - "_mkpath_local" regression: it was now failing to create any
+          directory at all (bug report by Douglas Wilson)
+
 1.84_01  Jun 9, 2016
         - Do not use "alarm", it doesn't play nicely with threads (bug
           report by Chris Denley, #rt112101).
