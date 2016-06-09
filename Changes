@@ -1,14 +1,17 @@
 Revision history for Net::SFTP::Foreign
 
-1.82_01
-        - look for sftp-server in some additional common places when
-          testing the module (bug report by Kent Fredric)
-        - in get method disable overwrite by default when append is
-          being used
-        - append feature on get was depending on unspecified behavior
+1.83  Jun 9, 2016
+        - "_mkpath_local" was broken for relative directories (bug
+          report by Douglas Wilson, #rt115174).
+        - Look for "sftp-server" in some additional common places when
+          testing the module (bug report by Kent Fredric).
+        - In "get" method disable "overwrite" by default when "append"
+          is being used.
+        - "append" feature on "get" was depending on unspecified
+          behavior.
 
 1.81  Dec 20, 2015
-        - rerelease as stable
+        - Rereleased as stable.
 
 1.80_01  Nov 10, 2015
         - mkpath was using the wrong permissions and generating a
