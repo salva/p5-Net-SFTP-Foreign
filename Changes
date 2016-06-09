@@ -5,7 +5,7 @@ Revision history for Net::SFTP::Foreign
           report by Douglas Wilson, #rt115174).
         - Look for "sftp-server" in some additional common places when
           testing the module (bug report by Kent Fredric).
-        - In "get" method disable "overwrite" by default when "append"
+        - In "get" method, disable "overwrite" by default when "append"
           is being used.
         - "append" feature on "get" was depending on unspecified
           behavior.
