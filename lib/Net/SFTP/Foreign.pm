@@ -1163,49 +1163,50 @@ sub mkpath {
 
 sub _mkpath_local {
     my ($sftp, $path, $perm, $parent) = @_;
+    # When parent is set, the last path part is removed and the parent
+    # directory of the path given created.
+
     my @parts = File::Spec->splitdir($path);
-    my @tail;
-    if ($debug and $debug & 32768) {
-        my $target = File::Spec->join(@parts);
-        _debug "_mkpath_local('$target')";
-    }
+    $debug and $debug & 32768 and _debug "_mkpath_local($path, $perm, ".($parent||0).")";
+
     if ($parent) {
         pop @parts while @parts and not length $parts[-1];
-        @parts or goto top_dir_reached;
+        unless (@parts) {
+            $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
+                              "mkpath failed, top dir reached");
+            return;
+        }
         pop @parts;
     }
-    while (1) {
-        my $target = File::Spec->join(@parts);
-        $target = '' unless defined $target;
+
+    my @tail;
+    while (@parts) {
+        my $target = File::Spec->catdir(@parts);
         if (-e $target) {
-            if (-d $target) {
-                while (@tail) {
-                    $target = File::Spec->join($target, shift(@tail));
-                    $debug and $debug and 32768 and _debug "creating local directory $target";
-                    unless (CORE::mkdir $target, $perm) {
-                        unless (do { local $!; -d $target}) {
-                            $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
-                                              "mkdir '$target' failed", $!);
-                            return;
-                        }
-                    }
-                }
-                return 1;
-            }
-            else {
+            unless (-d $target) {
                 $sftp->_set_error(SFTP_ERR_LOCAL_BAD_OBJECT,
                                   "Local file '$target' is not a directory");
                 return;
             }
+            last
         }
-        @parts or last;
         unshift @tail, pop @parts;
     }
 
- top_dir_reached:
-    $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
-                      "mkpath failed, top dir reached");
-    return;
+    while (@tail) {
+        push @parts, shift @tail;
+        my $target = File::Spec->catpath(@parts);
+        $debug and $debug and 32768 and _debug "creating local directory '$target'";
+        unless (CORE::mkdir $target, $perm) {
+            unless (do { local $!; -d $target}) {
+                $sftp->_set_error(SFTP_ERR_LOCAL_MKDIR_FAILED,
+                                  "mkdir '$target' failed", $!);
+                return;
+            }
+        }
+    }
+    $debug and $debug & 32768 and _debug "_mkpath_local succeeded";
+    return 1;
 }
 
 sub setstat {
