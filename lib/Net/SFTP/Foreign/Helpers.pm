@@ -46,12 +46,15 @@ sub _debug {
 	$caller =~ s/[\w:]*:://;
 	$caller .= ': ';
     }
+
+    my $line = join(' ', map { defined $_ ? $_ : '<undef>' } @_);
+
     if ($debug & 256) {
 	my $ts = sprintf("%010.5f", time);
-        print STDERR "#$$ $ts $caller", @_,"\n"
+        print STDERR "#$$ $ts $caller $line\n";
     }
     else {
-        print STDERR "# $caller", @_,"\n"
+        print STDERR "# $caller $line\n";
     }
 }
 
