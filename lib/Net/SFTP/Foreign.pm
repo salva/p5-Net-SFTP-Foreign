@@ -315,9 +315,9 @@ sub disconnect {
 	    else {
 		while (1) {
 		    last if waitpid($pid, 0) > 0;
-		    if ($! != Errno::EINTR) {
+		    if ($! != Errno::EINTR()) {
 			warn "internal error: unexpected error in waitpid($pid): $!"
-			    if $! != Errno::ECHILD;
+			    if $! != Errno::ECHILD();
 			last;
 		    }
 		}
@@ -3284,7 +3284,7 @@ sub _close {
 
 sub _check {
     return 1 if defined(*{shift()}{ARRAY}[0]);
-    $! = Errno::EBADF;
+    $! = Errno::EBADF();
     undef;
 }
 
