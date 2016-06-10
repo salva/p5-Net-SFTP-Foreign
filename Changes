@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.86  Jun 10, 2016
+        - Some old perl versions doesn't like Errno constant subs
+          being called without parents. Add them.
+
 1.85  Jun 9, 2016
         - "_mkpath_local" regression: it was now failing to create any
           directory at all (bug report by Douglas Wilson)
