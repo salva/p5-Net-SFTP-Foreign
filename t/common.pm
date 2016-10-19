@@ -17,8 +17,10 @@ flock DATA, Fcntl::LOCK_EX();
 sub is_windows { $^O =~ /MSWin32/i }
 
 sub sftp_server {
-
     my ($sscmd, @ssh, $ssname);
+
+    $sscmd = $ENV{NET_SFTP_FOREIGN_TESTING_SFTP_SERVER_PATH};
+    return $sscmd if defined $sscmd;
 
     if(is_windows) {
 	$ssname = 'sftp-server.exe';
