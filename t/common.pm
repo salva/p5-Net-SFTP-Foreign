@@ -134,6 +134,12 @@ sub new_args {
         my $ss_cmd = sftp_server;
         defined $ss_cmd or plan skip_all => 'sftp-server not found';
         push @diag, "sftp-server found at $ss_cmd";
+
+        if ($ENV{NET_SFTP_FOREIGN_TESTING_WITH_WINE}) {
+            push @diag, "running it with wine!";
+            $ss_cmd = [wine => $ss_cmd];
+        }
+
         push @args, open2_cmd => $ss_cmd;
     }
     diag join(", ", @diag) if @diag;
