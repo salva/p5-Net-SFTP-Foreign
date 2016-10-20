@@ -4037,7 +4037,7 @@ X<get>Copies remote file C<$remote> to local $local. By default file
 attributes are also copied (permissions, atime and mtime). For
 instance:
 
-  $sftp->get('/var/log/messages', /tmp/messages')
+  $sftp->get('/var/log/messages', '/tmp/messages')
     or die "file transfer failed: " . $sftp->error;
 
 A file handle can also be used as the local target. In that case, the
