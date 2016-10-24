@@ -621,11 +621,12 @@ sub _open_mkpath {
 
 ## SSH2_FXP_OPENDIR (11)
 sub opendir {
-    @_ == 2 or croak 'Usage: $sftp->opendir($path)';
+    @_ <= 2 or croak 'Usage: $sftp->opendir($path)';
     ${^TAINT} and &_catch_tainted_args;
 
     my $sftp = shift;
     my $path = shift;
+    $path = '.' unless defined $path;
     $path = $sftp->_rel2abs($path);
     my $id = $sftp->_queue_str_request(SSH2_FXP_OPENDIR, $sftp->_fs_encode($path), @_);
     my $rid = $sftp->_get_handle($id, SFTP_ERR_REMOTE_OPENDIR_FAILED,
