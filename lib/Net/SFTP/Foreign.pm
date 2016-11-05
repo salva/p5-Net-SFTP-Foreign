@@ -1083,7 +1083,8 @@ sub join {
     while (@_) {
 	my $b = shift;
 	if (defined $b) {
-            if ($sftp->{_remote_has_volumes} and $b =~ /^([a-z]\:)(.*)/i) {
+            if (ref $sftp and   # this method can also be used as a static one
+                $sftp->{_remote_has_volumes} and $b =~ /^([a-z]\:)(.*)/i) {
                 $vol = $1;
                 $a = '.';
                 $b = $2;
