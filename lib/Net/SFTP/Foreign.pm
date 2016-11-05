@@ -227,6 +227,7 @@ sub new {
     $sftp->{_autoflush} = delete $opts{autoflush};
     $sftp->{_late_set_perm} = delete $opts{late_set_perm};
     $sftp->{_dirty_cleanup} = delete $opts{dirty_cleanup};
+    $sftp->{_remote_has_volumes} = delete $opts{remote_has_volumes};
 
     $sftp->{_timeout} = delete $opts{timeout};
     defined $sftp->{_timeout} and $sftp->{_timeout} <= 0 and croak "invalid timeout";
@@ -1077,10 +1078,16 @@ sub mkdir {
 
 sub join {
     my $sftp = shift;
+    my $vol = '';
     my $a = '.';
     while (@_) {
 	my $b = shift;
 	if (defined $b) {
+            if ($sftp->{_remote_has_volumes} and $b =~ /^([a-z]\:)(.*)/i) {
+                $vol = $1;
+                $a = '.';
+                $b = $2;
+            }
 	    $b =~ s|^(?:\./+)+||;
 	    if (length $b and $b ne '.') {
 		if ($b !~ m|^/| and $a ne '.' ) {
@@ -1095,7 +1102,7 @@ sub join {
 	    }
 	}
     }
-    $a;
+    "$vol$a";
 }
 
 sub _rel2abs {
