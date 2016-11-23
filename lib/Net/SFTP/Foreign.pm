@@ -1977,7 +1977,7 @@ sub get_content {
     ${^TAINT} and &_catch_tainted_args;
 
     my ($sftp, $name) = @_;
-    $name = $sftp->_rel2abs($name);
+    #$name = $sftp->_rel2abs($name);
     my @data;
 
     my $rfh = $sftp->open($name)
@@ -2000,7 +2000,7 @@ sub put {
         $local_is_fh and croak "unable to infer remote file name when a file handler is passed as local";
         $remote = (File::Spec->splitpath($local))[2];
     }
-    $remote = $sftp->_rel2abs($remote);
+    # $remote = $sftp->_rel2abs($remote);
 
     my $cb = delete $opts{callback};
     my $umask = delete $opts{umask};
