@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Attributes;
 
-our $VERSION = '1.68_05';
+our $VERSION = '1.86';
 
 use strict;
 use warnings;
