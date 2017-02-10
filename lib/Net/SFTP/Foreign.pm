@@ -2819,12 +2819,12 @@ sub rget {
 		 },
 		 wanted => sub {
 		     my $e = $_[1];
-		     # print "file fn:$e->{filename}, a:$e->{a}\n";
 		     unless (_is_dir($e->{a}->perm)) {
 			 if (!$wanted or $wanted->($sftp, $e)) {
 			     my $fn = $e->{filename};
 			     if ($fn =~ $reremote) {
-				 my $lpath = File::Spec->catfile($local, $1);
+				 my $lpath = ((length $1) ? File::Spec->catfile($local, $1) : $local);
+                                 # print "file fn:$e->{filename}, lpath:$lpath, re:$reremote\n";
                                  ($lpath) = $lpath =~ /(.*)/ if ${^TAINT};
 				 if (_is_lnk($e->{a}->perm) and !$ignore_links) {
 				     if ($sftp->get_symlink($fn, $lpath,
@@ -5629,7 +5629,7 @@ L<autodie>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2016 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2017 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 

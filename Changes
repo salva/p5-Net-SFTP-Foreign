@@ -1,7 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.87  Feb 10, 2017
+        - rget handle correctly the case where the given remote source
+          is a file (bug report by Mirror).
+
 1.86  Jun 10, 2016
-        - Some old perl versions doesn't like Errno constant subs
+        - Some old perl versions don't like Errno constant subs
           being called without parents. Add them.
 
 1.85  Jun 9, 2016
