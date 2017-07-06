@@ -1,5 +1,10 @@
 Revision history for Net::SFTP::Foreign
 
+1.88_01  Jul 6, 2017
+        - _read_fill_cache was setting error at EOF and even dying
+          when in autodie mode. That affected most methods on the
+          FileHandle interface.
+
 1.87  Feb 10, 2017
         - rget handle correctly the case where the given remote source
           is a file (bug report by Mirror).
