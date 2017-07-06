@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign::Constants;
 
-our $VERSION = '1.63_05';
+our $VERSION = '1.86';
 
 use strict;
 use warnings;
