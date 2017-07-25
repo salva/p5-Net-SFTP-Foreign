@@ -279,6 +279,10 @@ sub disconnect {
 
     $debug and $debug & 4 and _debug("$sftp->disconnect called (ssh pid: ".($pid||'').")");
 
+    # someone might have set a custom SIGCHLD handler, which may
+    # interfere with our waitpids, let's reset it temporarily
+    local $SIG{CHLD} = 'DEFAULT';
+
     local $sftp->{_autodie};
     $sftp->_conn_lost;
 

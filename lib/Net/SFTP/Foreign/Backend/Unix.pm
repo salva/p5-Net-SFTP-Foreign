@@ -113,6 +113,10 @@ sub _open4 {
 sub _init_transport {
     my ($backend, $sftp, $opts) = @_;
 
+    # someone might have set a custom SIGCHLD handler, which may
+    # interfere with our waitpids, let's reset it temporarily
+    local $SIG{CHLD} = 'DEFAULT';
+
     my $transport = delete $opts->{transport};
 
     if (defined $transport) {
@@ -292,7 +296,7 @@ sub _init_transport {
                     }
                 }
 
-                if (waitpid($child, POSIX::WNOHANG()) > 0) {
+                if (waitpid($child, POSIX::WNOHANG()) != 0) {
                     undef $sftp->{pid};
                     my $err = $? >> 8;
                     $sftp->_conn_failed("SSH slave exited unexpectedly with error code $err");
