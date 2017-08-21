@@ -292,7 +292,7 @@ sub _init_transport {
                     }
                 }
 
-                if (waitpid($child, POSIX::WNOHANG()) > 0) {
+                if (waitpid($child, POSIX::WNOHANG()) > 0 or $! == Errno::ECHILD()) {
                     undef $sftp->{pid};
                     my $err = $? >> 8;
                     $sftp->_conn_failed("SSH slave exited unexpectedly with error code $err");
