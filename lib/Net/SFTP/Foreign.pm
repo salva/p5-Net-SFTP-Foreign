@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.88_02';
+our $VERSION = '1.89';
 
 use strict;
 use warnings;
@@ -2473,7 +2473,7 @@ sub ls {
     my $cheap = ($names_only and !$realpath); 
     my ($cheap_wanted, $wanted);
     if ($cheap and
-	ref $opts{wanted} eq 'RegExp' and 
+	ref $opts{wanted} eq 'Regexp' and 
 	not defined $opts{no_wanted}) {
 	$cheap_wanted = delete $opts{wanted}
     }
@@ -5636,7 +5636,7 @@ L<autodie>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2017 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2018 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 
