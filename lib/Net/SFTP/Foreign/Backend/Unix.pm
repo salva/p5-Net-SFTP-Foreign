@@ -295,7 +295,7 @@ sub _init_transport {
                 if (waitpid($child, POSIX::WNOHANG()) > 0 or $! == Errno::ECHILD()) {
                     undef $sftp->{pid};
                     my $err = $? >> 8;
-                    $sftp->_conn_failed("SSH slave exited unexpectedly with error code $err");
+                    $sftp->_conn_failed("SSH subprocess exited unexpectedly with error code $err");
                     return;
                 }
 
@@ -367,7 +367,7 @@ sub _after_init {
     my ($backend, $sftp) = @_;
     if ($sftp->{pid} and not $sftp->error) {
         # do not propagate signals sent from the terminal to the
-        # slave SSH:
+        # SSH subprocess:
         local ($@, $!);
         eval { setpgrp($sftp->{pid}, 0) };
     }
