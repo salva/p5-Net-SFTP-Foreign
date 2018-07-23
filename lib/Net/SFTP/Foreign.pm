@@ -2470,10 +2470,10 @@ sub ls {
     my $names_only = delete $opts{names_only};
     my $realpath = delete $opts{realpath};
     my $queue_size = delete $opts{queue_size};
-    my $cheap = ($names_only and !$realpath);
+    my $cheap = ($names_only and !$realpath); 
     my ($cheap_wanted, $wanted);
     if ($cheap and
-	ref $opts{wanted} eq 'Regexp' and
+	ref $opts{wanted} eq 'Regexp' and 
 	not defined $opts{no_wanted}) {
 	$cheap_wanted = delete $opts{wanted}
     }
