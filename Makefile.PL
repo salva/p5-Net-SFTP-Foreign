@@ -11,6 +11,7 @@ WriteMakefile( NAME => 'Net::SFTP::Foreign',
 	       PREREQ_PM => { 'Test::More'   => 0,
                               'Scalar::Util' => 0,
                               'Time::HiRes'  => 0 },
+               MIN_PERL_VERSION => 5.006,
                META_MERGE =>
                { resources =>
                  { repository => 'http://github.com/salva/p5-Net-SFTP-Foreign',
