@@ -3821,7 +3821,7 @@ beginning of the system call. That allows one, for instance, to
 connect to the target host through some SSH proxy:
 
   $sftp = Net::SFTP::Foreign->new($host,
-              ssh_cmd => qw(ssh -l user proxy.server ssh));
+              ssh_cmd => [qw(ssh -l user proxy.server ssh)]);
 
 But note that the module will not handle password authentication for
 those proxies.
