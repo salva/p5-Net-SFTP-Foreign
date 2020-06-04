@@ -5631,7 +5631,7 @@ L<autodie>.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2005-2019 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (c) 2005-2020 Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 Copyright (c) 2001 Benjamin Trott, Copyright (c) 2003 David Rolsky.
 

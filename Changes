@@ -1,5 +1,11 @@
 Revision history for Net::SFTP::Foreign
 
+1.90_02
+	- Some file types were being incorrectly identified (bug
+          report and patch by balakine, #gh16).
+	- Some documentation typos corrected (reported by Felix
+          Ostmann, #gh15).
+
 1.90_01  Oct 4, 2019
 	- Some servers reply to readdir operations on empty
           directories with a 0 entry listing instead of an EOF. The
