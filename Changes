@@ -1,6 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
-1.90_02
+
+1.91  Jun 24, 2020
+	- ls was not handling the queue size correctly in some
+	  cases.
 	- Some file types were being incorrectly identified (bug
           report and patch by balakine, #gh16).
 	- Some documentation typos corrected (reported by Felix

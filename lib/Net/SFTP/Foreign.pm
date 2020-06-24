@@ -2490,7 +2490,7 @@ sub ls {
     $queue_size = 1 if ($follow_links or $realpath or
 			($wanted and not $delayed_wanted));
     my $max_queue_size = $queue_size || $sftp->{_queue_size};
-    $queue_size ||= 2;
+    $queue_size ||= ($max_queue_size < 2 ? $max_queue_size : 2);
 
     $dir = '.' unless defined $dir;
     $dir = $sftp->_rel2abs($dir);
