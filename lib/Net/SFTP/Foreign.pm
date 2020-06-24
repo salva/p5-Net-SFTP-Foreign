@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.91';
+our $VERSION = '1.92_01';
 
 use strict;
 use warnings;
@@ -76,6 +76,7 @@ sub _queue_new_msg {
     my $sftp = shift;
     my $code = shift;
     my $id = $sftp->_next_msg_id;
+    $sftp->{incomming}{$id} = undef;
     my $msg = Net::SFTP::Foreign::Buffer->new(int8 => $code, int32 => $id, @_);
     $sftp->_queue_msg($msg);
     return $id;
@@ -182,7 +183,8 @@ sub new {
 		 _connected => 1,
 		 _queued    => 0,
                  _error     => 0,
-                 _status    => 0 };
+                 _status    => 0,
+		 _incomming => {} };
 
     bless $sftp, $class;
 
@@ -417,21 +419,31 @@ sub _check_extension {
 }
 
 # helper methods:
-sub _get_msg_and_check {
-    my ($sftp, $etype, $eid, $err, $errstr) = @_;
-    my $msg = $sftp->_get_msg;
-    if ($msg) {
-	my $type = $msg->get_int8;
-	my $id = $msg->get_int32;
 
-	$sftp->_clear_error_and_status;
-
-	if ($id != $eid) {
+sub _get_msg_by_id {
+    my ($sftp, $eid) = @_;
+    while (1) {
+	my $msg = delete($sftp->{incomming}{$eid}) || $sftp->_get_msg || return;
+	my $id = unpack xN => $$msg;
+	return $msg if $id == $eid;
+	unless (exists $sftp->{incomming}{$id}) {
 	    $sftp->_conn_lost(SSH2_FX_BAD_MESSAGE,
 			      SFTP_ERR_REMOTE_BAD_MESSAGE,
-			      $errstr, "bad packet sequence, expected $eid, got $id");
+			      $_[2], "bad packet sequence, expected $eid, got $id");
 	    return undef;
 	}
+	$sftp->{incomming}{$id} = $$msg
+    }
+}
+
+sub _get_msg_and_check {
+    my ($sftp, $etype, $eid, $err, $errstr) = @_;
+    my $msg = $sftp->_get_msg_by_id($eid, $errstr);
+    if ($msg) {
+	my $type = $msg->get_int8;
+	$msg->get_int32; # discard id, it has already been checked at _get_msg_by_id
+
+	$sftp->_clear_error_and_status;
 
 	if ($type != $etype) {
 	    if ($type == SSH2_FXP_STATUS) {
@@ -767,7 +779,7 @@ sub _write {
 					"Couldn't write to remote file")) {
 
 	    # discard responses to queued requests:
-	    $sftp->_get_msg for @msgid;
+	    $sftp->_get_msg_by_id($_) for @msgid;
 	    return $last;
 	}
     }
@@ -895,7 +907,7 @@ sub _fill_read_cache {
             }
         }
 
-        $sftp->_get_msg for @msgid;
+        $sftp->_get_msg_by_id($_) for @msgid;
 
         if ($ensure_eof and
             $sftp->_get_msg_and_check(SSH2_FXP_DATA, $ensure_eof,
@@ -1860,7 +1872,7 @@ sub get {
             }
         }
 
-        $sftp->_get_msg for (@msgid);
+        $sftp->_get_msg_by_id($_) for @msgid;
 
         goto CLEANUP if $sftp->{_error};
 
@@ -2406,7 +2418,7 @@ sub put {
 
         CORE::close $fh unless $local_is_fh;
 
-        $sftp->_get_msg for (@msgid);
+        $sftp->_get_msg_by_id($_) for @msgid;
 
         $sftp->truncate($rfh, $writeoff)
             if $last_block_was_zeros and not $sftp->{_error};
@@ -2563,7 +2575,7 @@ sub ls {
 	    $queue_size++ if $queue_size < $max_queue_size;
 	}
 	$sftp->_set_error if $sftp->{_status} == SSH2_FX_EOF;
-	$sftp->_get_msg for @msgid;
+	$sftp->_get_msg_by_id($_) for @msgid;
         $sftp->_closedir_save_status($rdh) if $rdh;
     };
     unless ($sftp->{_error}) {
