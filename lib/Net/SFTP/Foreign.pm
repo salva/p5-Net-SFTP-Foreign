@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.92_01';
+our $VERSION = '1.92_02';
 
 use strict;
 use warnings;
@@ -423,7 +423,7 @@ sub _check_extension {
 sub _get_msg_by_id {
     my ($sftp, $eid) = @_;
     while (1) {
-	my $msg = delete($sftp->{incomming}{$eid}) || $sftp->_get_msg || return;
+	my $msg = delete($sftp->{incomming}{$eid}) || $sftp->_get_msg || return undef;
 	my $id = unpack xN => $$msg;
 	return $msg if $id == $eid;
 	unless (exists $sftp->{incomming}{$id}) {
@@ -432,7 +432,7 @@ sub _get_msg_by_id {
 			      $_[2], "bad packet sequence, expected $eid, got $id");
 	    return undef;
 	}
-	$sftp->{incomming}{$id} = $$msg
+	$sftp->{incomming}{$id} = $msg
     }
 }
 
