@@ -4,8 +4,9 @@ Revision history for Net::SFTP::Foreign
 	- Fix handling of out of order responses.
 
 1.92_01 Jun 24, 2020
-	- Add support for receiving out of order responses from
-	  the server (fixes #rt132768).
+	- Add support for receiving out of order responses from the
+	  server (bug report by Dimitar Kolev #rt130641, fixes also
+	  #rt132768).
 
 1.91  Jun 24, 2020
 	- ls was not handling the queue size correctly in some
