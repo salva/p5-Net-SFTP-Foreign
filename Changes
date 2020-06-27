@@ -5,7 +5,7 @@ Revision history for Net::SFTP::Foreign
 
 1.92_01 Jun 24, 2020
 	- Add support for receiving out of order responses from the
-	  server (bug report by Dimitar Kolev #rt130641, fixes also
+	  server (bug report by Dimitar Kolev #rt130641 and ftumsh
 	  #rt132768).
 
 1.91  Jun 24, 2020
