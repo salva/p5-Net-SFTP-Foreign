@@ -798,8 +798,9 @@ sub write {
     $$bout .= $_[2];
     my $len = length $$bout;
 
-    $sftp->flush($rfh, 'out')
-	if ($len >= $sftp->{_write_delay} or ($len and $sftp->{_autoflush} ));
+    if ($len >= $sftp->{_write_delay} or ($len and $sftp->{_autoflush} )) {
+	$sftp->flush($rfh, 'out') or return undef;
+    }
 
     return $datalen;
 }
@@ -842,7 +843,7 @@ sub flush {
 	    $rfh->_inc_pos($written)
 		unless $append;
 
-	    substr($$bout, 0, $written, '');
+	    $$bout = ''; # The full buffer is discarded even when some error happens.
 	    $written == $len or return undef;
 	}
     }
@@ -5002,6 +5003,11 @@ returns the data read from the remote file and undef on failure
 
 writes C<$data> to the remote file C<$handle>. Returns the number of
 bytes written or undef on failure.
+
+Note that unless the file has been open in C<autoflush> mode, data
+will be cached until the buffer fills, the file is closed or C<flush>
+is explicitly called. That could also mask write errors that would
+become unnoticed until later.
 
 =item $sftp-E<gt>readline($handle)
 
