@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.92_03 Oct 1, 2020
+	- Write buffer could grow uncontrolled after a connection
+	  lost error (bug report by Jozef Kutej, #gh17).
+
 1.92_02 Jun 25, 2020
 	- Fix handling of out of order responses.
 

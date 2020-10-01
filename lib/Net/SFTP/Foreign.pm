@@ -1,6 +1,6 @@
 package Net::SFTP::Foreign;
 
-our $VERSION = '1.92_02';
+our $VERSION = '1.92_03';
 
 use strict;
 use warnings;
@@ -5007,7 +5007,8 @@ bytes written or undef on failure.
 Note that unless the file has been open in C<autoflush> mode, data
 will be cached until the buffer fills, the file is closed or C<flush>
 is explicitly called. That could also mask write errors that would
-become unnoticed until later.
+become unnoticed until later when the write operation is actually
+performed.
 
 =item $sftp-E<gt>readline($handle)
 
