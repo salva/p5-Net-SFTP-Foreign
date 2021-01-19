@@ -2466,7 +2466,7 @@ sub put_content {
         $sftp->_set_error(SFTP_ERR_LOCAL_OPEN_FAILED, "Can't open scalar as file handle", $!);
         return undef;
     }
-    $sftp->put($fh, $remote, %opts);
+    $sftp->put($fh, $remote, %put_opts);
 }
 
 sub ls {
