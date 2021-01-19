@@ -1,5 +1,9 @@
 Revision history for Net::SFTP::Foreign
 
+1.93  Jan 19, 2021
+        - put_content was not handling optional arguments correctly
+          (bug report by Bas van Sisseren).
+
 1.92_03 Oct 1, 2020
 	- Write buffer could grow uncontrolled after a connection
 	  lost error (bug report by Jozef Kutej, #gh17).
