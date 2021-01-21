@@ -107,7 +107,10 @@ for my $setcwd (0, 1) {
 
         ok (my $attr = $sftp->stat($drfn), "stat - $i");
 
-        is ($attr->size, (stat($dlfn))[7], "stat - size - $i");
+    SKIP: {
+	    skip "attr is undefined", 1 unless defined $attr;
+	    is ($attr->size, (stat($dlfn))[7], "stat - size - $i");
+	};
 
         ok (!$sftp->put($dlfn, $drfn, overwrite => 0), "no overwrite - $i");
         is (int $sftp->error, Net::SFTP::Foreign::Constants::SFTP_ERR_REMOTE_OPEN_FAILED(), "no overwrite - error - $i");
