@@ -31,7 +31,7 @@ sub _open_dev_null {
     my $sftp = shift;
     my $dev_null;
     unless (open $dev_null, '>', 'NUL:') {
-	$sftp->_conn_failed("Unable to redirect stderr for slave SSH process to NUL: $!");
+	$sftp->_conn_failed("Unable to redirect stderr for SSH subprocess to NUL: $!");
 	return;
     }
     $dev_null

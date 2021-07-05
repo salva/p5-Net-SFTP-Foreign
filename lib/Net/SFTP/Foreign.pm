@@ -5536,11 +5536,11 @@ are welcome!
 =item - Dirty cleanup:
 
 On some operating systems, closing the pipes used to communicate with
-the slave SSH process does not terminate it and a work around has to
-be applied. If you find that your scripts hung when the $sftp object
-gets out of scope, try setting C<$Net::SFTP::Foreign::dirty_cleanup>
-to a true value and also send me a report including the value of
-C<$^O> on your machine and the OpenSSH version.
+the SSH subprocess does not terminate it and a work around has to be
+applied. If you find that your scripts hung when the $sftp object gets
+out of scope, try setting C<$Net::SFTP::Foreign::dirty_cleanup> to a
+true value and also send me a report including the value of C<$^O> on
+your machine and the OpenSSH version.
 
 From version 0.90_18 upwards, a dirty cleanup is performed anyway when
 the SSH process does not terminate by itself in 8 seconds or less.
@@ -5554,10 +5554,10 @@ C<symlink> method will interpret its arguments in reverse order.
 
 =item - IPC::Open3 bugs on Windows
 
-On Windows the IPC::Open3 module is used to spawn the slave SSH
-process. That module has several nasty bugs (related to STDIN, STDOUT
-and STDERR being closed or not being assigned to file descriptors 0, 1
-and 2 respectively) that will cause the connection to fail.
+On Windows the IPC::Open3 module is used to spawn the SSH subprocess.
+That module has several nasty bugs (related to STDIN, STDOUT and STDERR
+being closed or not being assigned to file descriptors 0, 1 and 2
+respectively) that will cause the connection to fail.
 
 Specifically this is known to happen under mod_perl/mod_perl2.
 
